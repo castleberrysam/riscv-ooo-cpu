@@ -23,6 +23,14 @@ SIMOPTS += -o top
 build/top: $(SRCS) build/cpu.v $(DRAMSIM)/DRAMsim3/libdramsim3.a
 	$(SIM) $(SIMOPTS) $(SRCS) build/cpu.v
 	$(MAKE) -C build -f Vtop.mk OPT_SLOW=-O2 OPT_FAST=-O3 OPT_GLOBAL=-O3
+else ifeq ($(SIM),iverilog)
+SRCS := timescale $(SRCS)
+SIMOPTS := -g2012 -s top
+SIMOPTS += -m$(DRAMSIM)/DRAMsim3/dramsim3.vpi
+SIMOPTS += -o build/top
+
+build/top: $(SRCS) build/cpu.v $(DRAMSIM)/DRAMsim3/dramsim3.vpi
+	$(SIM) $(SIMOPTS) $(SRCS) build/cpu.v
 else
 $(error Unknown simulator $(SIM))
 endif
@@ -36,6 +44,8 @@ build/%.v: $(SRCS) %.v.in | build
 
 $(DRAMSIM)/DRAMsim3/libdramsim3.a:
 	$(MAKE) -C $(DRAMSIM)/DRAMsim3
+$(DRAMSIM)/DRAMsim3/dramsim3.vpi: $(DRAMSIM)/DRAMsim3/libdramsim3.a
+	cd $(DRAMSIM)/DRAMsim3/ && iverilog-vpi --name=dramsim3 -Isrc/ -DICARUS_VERILOG src/*.o $(DRAMSIM)/dramsim_vpi.cc
 
 build:
 	mkdir build

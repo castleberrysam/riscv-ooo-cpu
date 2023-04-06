@@ -204,8 +204,10 @@ static PLI_INT32 init_calltf(PLI_BYTE8* user_data) {
   // register endsim_cb
   s_cb_data cb_data = {cbEndOfSimulation, endsim_cb};
   vpi_register_cb(&cb_data);
+#ifndef ICARUS_VERILOG
   cb_data = {cbPLIError, error_cb};
   vpi_register_cb(&cb_data);
+#endif
 
   // initialize dramclk
   vpiHandle args;
@@ -315,5 +317,25 @@ uint64_t get_simtime(void) {
   return ((uint64_t) vpi_time.low) | (((uint64_t) vpi_time.high) << 32);
 }
 
+#ifdef ICARUS_VERILOG
+static void register_tf(PLI_INT32 type, PLI_INT32 (*calltf)(PLI_BYTE8*), const char *tfname) {
+  s_vpi_systf_data systf_data;
+  systf_data.type = type;
+  systf_data.tfname = (PLI_BYTE8 *) tfname;
+  systf_data.calltf = calltf;
+  systf_data.compiletf = nullptr;
+  systf_data.sizetf = nullptr;
+  systf_data.user_data = nullptr;
+  vpi_register_systf(&systf_data);
+}
+static void register_all(void) {
+  register_tf(vpiSysTask, init_calltf,      "$dramsim$init");
+  register_tf(vpiSysFunc, cmdready_calltf,  "$dramsim$cmdready");
+  register_tf(vpiSysTask, cmddata_calltf,   "$dramsim$cmddata");
+  register_tf(vpiSysFunc, respready_calltf, "$dramsim$respready");
+  register_tf(vpiSysTask, respdata_calltf,  "$dramsim$respdata");
+}
+void (*vlog_startup_routines[])() = {register_all,nullptr};
+#endif
 }
 #undef SHIM
