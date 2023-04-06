@@ -17,6 +17,7 @@ module bfs_core (
   output            bfs_dc_req,
   output reg [1:0]  bfs_dc_op,
   output reg [31:0] bfs_dc_addr,
+  output [7:0]      bfs_dc_wmask,
   output [63:0]     bfs_dc_wdata,
   input             dc_ready,
 
@@ -119,7 +120,8 @@ module bfs_core (
 
   // Cache
   assign bfs_dc_req = deq_req | spill_req;
-  assign bfs_dc_wdata = spill_data;
+  assign bfs_dc_wmask = bfs_dc_op[1] ? 8'b10000000 : 8'b11111111;
+  assign bfs_dc_wdata = bfs_dc_op[0] ? 64'h01000000_00000000 : spill_data;
   // Address
   always @(*) begin
     casez({spill_req, spill_op})

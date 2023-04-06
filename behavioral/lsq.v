@@ -323,7 +323,7 @@ module lsq(
             lq_base[j] <= wb_result;
 
 `ifndef SYNTHESIS
-            top.tb_trace_lsq_base(
+            tb_top.tb_trace_lsq_base(
               {1'b0,j[3:0]},
               wb_result);
 `endif
@@ -376,7 +376,7 @@ module lsq(
               sq_base[k] <= wb_result;
 
 `ifndef SYNTHESIS
-              top.tb_trace_lsq_base(
+              tb_top.tb_trace_lsq_base(
                 {1'b1,k[3:0]},
                 wb_result);
 `endif
@@ -387,7 +387,7 @@ module lsq(
               sq_data[k] <= wb_result;
 
 `ifndef SYNTHESIS
-              top.tb_trace_lsq_wdata(
+              tb_top.tb_trace_lsq_wdata(
                 {1'b1,k[3:0]},
                 wb_result);
 `endif
@@ -398,7 +398,7 @@ module lsq(
 `ifndef SYNTHESIS
   always @(posedge clk)
     if(rename_beat)
-      top.tb_trace_lsq_dispatch(
+      tb_top.tb_trace_lsq_dispatch(
         rename_robid,
         rename_op[3] ? {1'b1,sq_tail} : {1'b0,lq_insert_idx},
         rename_op,
@@ -407,7 +407,7 @@ module lsq(
 
   always @(posedge clk)
     if(~rst)
-      top.tb_log_lsq_inflight(
+      tb_top.tb_log_lsq_inflight(
         lq_valid,
         sq_valid);
 `endif

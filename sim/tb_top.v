@@ -1,10 +1,10 @@
 `include "buscmd.vh"
 
-module top();
+module tb_top();
 
   reg clk/*verilator public*/;
   reg rst/*verilator public*/;
-  cpu cpu(
+  top top(
     .clk(clk),
     .rst(rst));
 
@@ -581,28 +581,28 @@ module top();
   reg rob_rd_empty_r;
   reg rob_buf_executed_r;
   always @(posedge clk) begin
-    rob_rd_empty_r <= cpu.rob.ret_rd_empty;
-    rob_buf_executed_r <= cpu.rob.buf_executed[cpu.rob.ret_rd_addr];
-    if(~rst & ~cpu.rob.ret_valid)
-      tb_trace_retire_stall(cpu.rob.buf_head, rob_rd_empty_r, rob_buf_executed_r, cpu.rob.ret_retop);
+    rob_rd_empty_r <= top.cpu.rob.ret_rd_empty;
+    rob_buf_executed_r <= top.cpu.rob.buf_executed[top.cpu.rob.ret_rd_addr];
+    if(~rst & ~top.cpu.rob.ret_valid)
+      tb_trace_retire_stall(top.cpu.rob.buf_head, rob_rd_empty_r, rob_buf_executed_r, top.cpu.rob.ret_retop);
   end
 
   always @(posedge clk)
     if(~rst)
-      tb_trace_wb_stall(cpu.scalu0.scalu_stall,
-                        cpu.scalu1.scalu_stall,
-                        cpu.mcalu0.mcalu_stall & cpu.mcalu0.done,
-                        cpu.mcalu1.mcalu_stall & cpu.mcalu1.done,
-                        cpu.lsq.lsq_wb_valid & cpu.lsq.wb_lsq_stall);
+      tb_trace_wb_stall(top.cpu.scalu0.scalu_stall,
+                        top.cpu.scalu1.scalu_stall,
+                        top.cpu.mcalu0.mcalu_stall & top.cpu.mcalu0.done,
+                        top.cpu.mcalu1.mcalu_stall & top.cpu.mcalu1.done,
+                        top.cpu.lsq.lsq_wb_valid & top.cpu.lsq.wb_lsq_stall);
 
   always @(posedge clk)
-    if(~rst & cpu.dcache.s0_req_r & ~cpu.dcache.s0_inv_r & ~cpu.dcache.s0_stall & ~cpu.dcache.lsq_dc_flush)
-      tb_trace_dcache(cpu.dcache.s0_op_r[0],
-                      ~cpu.dcache.s0_tagmiss,
-                      cpu.dcache.s0_rd_forward,
-                      cpu.dcache.s0_rd_merge,
-                      cpu.dcache.s0_wr_merge,
-                      cpu.dcache.s0_mshr_alloc,
-                      cpu.dcache.s0_mshrhit);
+    if(~rst & top.cpu.dcache.s0_req_r & ~top.cpu.dcache.s0_inv_r & ~top.cpu.dcache.s0_stall & ~top.cpu.dcache.lsq_dc_flush)
+      tb_trace_dcache(top.cpu.dcache.s0_op_r[0],
+                      ~top.cpu.dcache.s0_tagmiss,
+                      top.cpu.dcache.s0_rd_forward,
+                      top.cpu.dcache.s0_rd_merge,
+                      top.cpu.dcache.s0_wr_merge,
+                      top.cpu.dcache.s0_mshr_alloc,
+                      top.cpu.dcache.s0_mshrhit);
 
 endmodule

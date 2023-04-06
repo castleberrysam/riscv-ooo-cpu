@@ -273,7 +273,7 @@ module decode(
 `ifndef SYNTHESIS
   always @(posedge clk)
     if(valid & ~decode_stall)
-      top.tb_trace_decode(
+      tb_top.tb_trace_decode(
         decode_robid,
         decode_rsop,
         insn,

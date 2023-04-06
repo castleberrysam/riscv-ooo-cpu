@@ -191,9 +191,9 @@ module bus(
   always @(posedge clk)
     if(bus_valid) begin
       if(bus_cmd == `CMD_FILL || bus_cmd == `CMD_FLUSH)
-        top.tb_log_bus_data(bus_cycle_r, bus_data);
+        tb_top.tb_log_bus_data(bus_cycle_r, bus_data);
       if(bus_cycle_r == 7)
-        top.tb_log_bus_cycle(
+        tb_top.tb_log_bus_cycle(
           bus_nack,
           bus_hit,
           bus_cmd,

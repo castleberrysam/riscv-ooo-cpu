@@ -255,14 +255,14 @@ module csr(
 `ifndef SYNTHESIS
   always @(posedge clk)
     if(valid & ~csr_error & wen)
-      top.tb_trace_csr_write(
+      tb_top.tb_trace_csr_write(
         robid,
         addr,
         wdata);
 
   always @(posedge clk)
     if(wen & sel_muarttx)
-      top.tb_uart_tx(wdata[7:0]);
+      tb_top.tb_uart_tx(wdata[7:0]);
 `endif
 
 endmodule

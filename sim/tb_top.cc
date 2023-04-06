@@ -1,11 +1,11 @@
 #include "dramsim_verilator.h"
 
 #include <verilated.h>
-#include "Vtop.h"
-#include "Vtop_top.h"
+#include "Vtb_top.h"
+#include "Vtb_top_tb_top.h"
 
 #include <svdpi.h>
-#include "Vtop__Dpi.h"
+#include "Vtb_top__Dpi.h"
 
 #include <verilated_fst_c.h>
 
@@ -73,7 +73,7 @@ static std::unordered_map<uint16_t,std::string> csr_names = {
 };
 
 static VerilatedContext* context;
-static Vtop* top;
+static Vtb_top* tb_top;
 static DRAM* dram;
 
 static VerilatedFstC* dumper;
@@ -317,17 +317,17 @@ static void tick() {
     }
   }
 
-  top->top->clk = 1;
-  top->eval();
+  tb_top->tb_top->clk = 1;
+  tb_top->eval();
   if(dump_running) {dumper->dump(context->time()*1000);}
 
-  top->top->clk = 0;
-  top->eval();
+  tb_top->tb_top->clk = 0;
+  tb_top->eval();
   if(dump_running) {dumper->dump((context->time()*1000)+500);}
 
   dram->tick();
 
-  if(!top->top->rst)
+  if(!tb_top->tb_top->rst)
     stats.rob_inflight_hist[stats.rob_inflight]++;
 
   context->timeInc(1);
@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
   clock_t stop = 0;
 
   // Initialize models
-  top = new Vtop(context);
+  tb_top = new Vtb_top(context);
   dram = new DRAM(context, -9);
   if(!dram->initialized()) {
     fprintf(stderr, "ERROR: dramsim failed to initialize\n");
@@ -375,7 +375,7 @@ int main(int argc, char** argv) {
     dumper = new VerilatedFstC;
     dumper->set_time_unit("1ps");
     dumper->set_time_resolution("1ps");
-    top->trace(dumper, 128); // 128 levels of hierarchy
+    tb_top->trace(dumper, 128); // 128 levels of hierarchy
     dumper->open("top.fst");
     if(!init_dump_ranges()) {
       error = true;
@@ -391,17 +391,17 @@ int main(int argc, char** argv) {
 
   // Reset models
   context->time(0);
-  top->top->clk = 0;
-  top->top->rst = 1;
+  tb_top->tb_top->clk = 0;
+  tb_top->tb_top->rst = 1;
   do {tick();} while(context->time() < 10);
-  top->top->rst = 0;
+  tb_top->tb_top->rst = 0;
 
   // Main sim loop
   while(!context->gotFinish()) {tick();}
 
   stop = clock();
 
-  top->final();
+  tb_top->final();
   if(dumper) {dumper->close();}
   print_stats();
 
@@ -414,7 +414,7 @@ int main(int argc, char** argv) {
 
  cleanup:
   delete dram;
-  delete top;
+  delete tb_top;
   delete dumper;
   delete context;
   return error ? 1 : 0;

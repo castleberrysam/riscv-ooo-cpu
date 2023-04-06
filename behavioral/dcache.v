@@ -619,13 +619,13 @@ module dcache(
   // testbench callbacks
   always @(posedge clk) begin
     if(lsq_dc_req & dcache_lsq_ready)
-      top.tb_log_dcache_req(
+      tb_top.tb_log_dcache_req(
         lsq_dc_lsqid,
         lsq_dc_op,
         lsq_dc_addr,
         lsq_dc_wdata);
     if(dcache_lsq_valid)
-      top.tb_log_dcache_resp(
+      tb_top.tb_log_dcache_resp(
         dcache_lsq_lsqid,
         dcache_lsq_error,
         dcache_lsq_rdata);

@@ -49,8 +49,8 @@ module rom(
 
   always @(*)
     if(resp_valid_r) begin
-      top.tb_mem_read(mem_addr, rom_bus_data[31:0]);
-      top.tb_mem_read(mem_addr+1, rom_bus_data[63:32]);
+      tb_top.tb_mem_read(mem_addr, rom_bus_data[31:0]);
+      tb_top.tb_mem_read(mem_addr+1, rom_bus_data[63:32]);
     end
 
   always @(posedge clk)

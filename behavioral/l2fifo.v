@@ -1,3 +1,5 @@
+`include "buscmd.vh"
+
 // l2 request fifo
 module l2fifo(
   input         clk,
@@ -14,9 +16,9 @@ module l2fifo(
   // l2 interface (out)
   output        l2fifo_l2_req,
   output [31:2] l2fifo_l2_addr,
-  output        l2fifo_l2_wen,
-  output [3:0]  l2fifo_l2_wmask,
-  output [31:0] l2fifo_l2_wdata,
+  output [1:0]  l2fifo_l2_op,
+  output [7:0]  l2fifo_l2_wmask,
+  output [63:0] l2fifo_l2_wdata,
   input         l2_l2fifo_ready);
 
   reg        req_valid;
@@ -32,10 +34,17 @@ module l2fifo(
     req_wdata = dcache_l2fifo_wdata;
   end
 
+  wire        l2fifo_l2_wen;
+  wire [3:0]  l2fifo_l2_wmask_base;
+  wire [31:0] l2fifo_l2_wdata_base;
+  assign l2fifo_l2_op = l2fifo_l2_wen ? `OP_WR4 : `OP_RD;
+  assign l2fifo_l2_wmask = l2fifo_l2_addr[2] ? {l2fifo_l2_wmask_base,4'b0} : {4'b0,l2fifo_l2_wmask_base};
+  assign l2fifo_l2_wdata = {2{l2fifo_l2_wdata_base}};
+
   // 30+1+4+32-1 = 67
   wire [66:0] fifo_wr_data, fifo_rd_data;
   assign fifo_wr_data = {req_addr,req_wen,req_wmask,req_wdata};
-  assign {l2fifo_l2_addr,l2fifo_l2_wen,l2fifo_l2_wmask,l2fifo_l2_wdata} = fifo_rd_data;
+  assign {l2fifo_l2_addr,l2fifo_l2_wen,l2fifo_l2_wmask_base,l2fifo_l2_wdata_base} = fifo_rd_data;
 
   wire fifo_wr_ready, fifo_rd_valid;
   fifo #(67,8) fifo(

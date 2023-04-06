@@ -4,8 +4,9 @@ cd "$(dirname $0)"
 exec emacs -Q --batch --eval="(progn $(tail -n+6 $0))" "$@"
 
 (require 'verilog-mode)
-(dolist (path '(".." "../bfs"))
+(dolist (path '("."  ".." "../bfs"))
   (push path verilog-library-directories))
+(setq verilog-auto-arg-format 'single)
 
 (dolist (file command-line-args-left)
   (find-file (concat "build/" file))
