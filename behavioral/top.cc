@@ -672,6 +672,8 @@ int tb_trace_rob_retire(const svBitVecVal* robid, const svBitVecVal* retop,
 
 int tb_uart_tx(const svBitVecVal* c) {
   fputc(*c, uartfile);
+  if(*c == '\n')
+    fflush(uartfile);
   return 0;
 }
 

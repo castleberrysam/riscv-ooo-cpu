@@ -108,6 +108,8 @@ module top();
     input [7:0] char);
 
     $fwrite(uartfd, "%c", char);
+    if(char == "\n")
+      $fflush(uartfd);
   endtask
 
   integer tracefd, logfd;
