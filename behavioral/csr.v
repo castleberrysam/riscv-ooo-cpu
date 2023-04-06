@@ -232,13 +232,13 @@ module csr(
   // Update CSR logic
   always @(*) begin
     // Passive updates
+    mtvec_n = wdata[31:2];
     {mcycleh_n, mcycle_n} = {mcycleh, mcycle} + 1;
     {minstreth_n, minstret_n} = {minstreth, minstret} + {63'b0,inc_minstret};
 
     // Active updates: CSR instructions (overrides passive)
     if(wen)
       case(1)
-        sel_mtvec: mtvec_n = wdata[31:2];
         sel_mcycle: mcycle_n = wdata;
         sel_mcycleh: mcycleh_n = wdata;
         sel_minstret: minstret_n = wdata;

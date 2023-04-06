@@ -6,25 +6,36 @@ module alu_simple(
   input [31:0]      op2,
   output reg [31:0] sc_result);
 
-  function automatic [31:0] compute_priority_vector (input[31:0] vector);
-    integer j;
-    integer result;
+  function automatic [31:0] compute_priority_vector(
+    input [31:0] vector);
+    integer i;
+    reg found;
     begin
-      for (j = 0; j < 32; j=j+1)
-        if (vector[j] == 1) begin
-          result = (1 << j);
-          j = 32;
+      compute_priority_vector = 0;
+      found = 0;
+      for(i = 0; i < 32; i=i+1)
+        if(!found && vector[i]) begin
+          compute_priority_vector[i] = 1;
+          found = 1;
         end
-      compute_priority_vector = (|vector ?  result : 0);
+    end
+  endfunction
+
+  function automatic [4:0] encode32(
+    input [31:0] in);
+    integer i;
+    begin
+      encode32 = 0;
+      for(i = 0; i < 32; i=i+1)
+        if(in[i])
+          encode32 = encode32 | i[4:0];
     end
   endfunction
 
   wire [31:0] p_vector;
   wire [4:0] p_index;
   assign p_vector = compute_priority_vector(op1 & ~op2);
-  /*verilator lint_off WIDTH*/
-  assign p_index = $clog2(p_vector);
-  /*verilator lint_on WIDTH*/
+  assign p_index = encode32(p_vector);
 
   always @(*) begin
     sc_result = 0;

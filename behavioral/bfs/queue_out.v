@@ -88,11 +88,11 @@ module queue_out #(
 
 
   wire wraparound = (buf_head_pol ^ buf_tail_pol);
-  wire pt_eq = (buf_head === buf_tail);
+  wire pt_eq = (buf_head == buf_tail);
 
-  // Sim hack to check buf_head === buf_tail + 1
+  // Sim hack to check buf_head == buf_tail + 1
   assign {bt_pol, bt} = {buf_tail_pol, buf_tail} + 1;
-  wire pt_full = (bt === buf_head);
+  wire pt_full = (bt == buf_head);
 
   assign {bh8_pol, bh8} = {buf_head_pol, buf_head} + 8;
   assign queue_sat = (bh8 <= buf_tail) ^ (bh8_pol ^ buf_tail_pol);

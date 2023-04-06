@@ -157,7 +157,7 @@ module bfs_core (
 
   wire rdata_hit;
   assign rdata_hit = rdata_valid & (rdata_value == target_val);
-  assign done = rdata_hit | (pend_empty & (swq_head === swq_tail));
+  assign done = rdata_hit | (pend_empty & (swq_head == swq_tail));
 
   always @(posedge clk) begin
     if (rst) begin

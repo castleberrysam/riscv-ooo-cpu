@@ -244,16 +244,15 @@ module decode(
 
   /*verilator lint_off WIDTH*/
   // immediate generator
-  always @(*) begin
-    imm = 0;
+  always @(*)
     case(1)
       fmt_i: imm = $signed(insn[31:20]);
       fmt_s: imm = $signed({insn[31:25],insn[11:7]});
       fmt_b: imm = $signed({insn[31],insn[7],insn[30:25],insn[11:8],1'b0});
       fmt_u: imm = {insn[31:12],12'b0};
       fmt_j: imm = $signed({insn[31],insn[19:12],insn[20],insn[30:21],1'b0});
+      default: imm = 0;
     endcase
-  end
   /*verilator lint_off WIDTH*/
 
   // rsop
@@ -271,6 +270,7 @@ module decode(
         rsop = {insn_complex|insn_aluext,insn_complex|altop,funct3};
     endcase
 
+`ifndef SYNTHESIS
   always @(posedge clk)
     if(valid & ~decode_stall)
       top.tb_trace_decode(
@@ -278,5 +278,6 @@ module decode(
         decode_rsop,
         insn,
         imm);
+`endif
 
 endmodule

@@ -72,11 +72,13 @@ module exers #(
   function automatic [$clog2(RS_ENTRIES):0] find_idx 
     (input[RS_ENTRIES-1:0] vector, input bit_val);
     integer j;
+    reg found;
     begin
+      found = 0;
       for (j = 0; j < RS_ENTRIES; j=j+1)
-        if (vector[j] == bit_val) begin
+        if (!found && vector[j] == bit_val) begin
           find_idx[$clog2(RS_ENTRIES)-1:0] = j;
-          j = RS_ENTRIES;
+          found = 1;
         end
       find_idx[$clog2(RS_ENTRIES)] = (bit_val ? (| vector) : (& vector));
     end

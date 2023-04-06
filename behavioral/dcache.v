@@ -615,6 +615,7 @@ module dcache(
       end
     end
 
+`ifndef SYNTHESIS
   // testbench callbacks
   always @(posedge clk) begin
     if(lsq_dc_req & dcache_lsq_ready)
@@ -629,5 +630,6 @@ module dcache(
         dcache_lsq_error,
         dcache_lsq_rdata);
   end
+`endif
 
 endmodule

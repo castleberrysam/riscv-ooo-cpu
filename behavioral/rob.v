@@ -212,6 +212,7 @@ module rob(
     end
   end
 
+`ifndef SYNTHESIS
   always @(posedge clk) begin
     if(ret_valid)
       top.tb_trace_rob_retire(
@@ -226,5 +227,6 @@ module rob(
     if(rob_flush)
       top.tb_log_rob_flush();
   end
+`endif
 
 endmodule

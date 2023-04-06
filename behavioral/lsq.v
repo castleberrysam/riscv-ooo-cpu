@@ -48,6 +48,17 @@ module lsq(
   input         rob_flush,
   input         rob_ret_store);
 
+  function automatic [3:0] encode16(
+    input [15:0] in);
+    integer i;
+    begin
+      encode16 = 0;
+      for(i = 0; i < 16; i=i+1)
+        if(in[i])
+          encode16 = encode16 | i[3:0];
+    end
+  endfunction
+
   // load queue
   reg [15:0]  lq_valid;
   reg [15:0]  lq_base_rdy;
@@ -130,7 +141,7 @@ module lsq(
 
     // check sq entries for conflicting addresses
     lq_sq_hit = 0;
-    for(i = 0; i < 16; i=i+1) begin
+    for(i = 0; i < 16; i=i+1)
       if(lq_sq_sel[i] & sq_valid[i]) begin
         // any stores with unresolved address?
         if(~sq_addr_rdy[i])
@@ -141,11 +152,6 @@ module lsq(
           if(lq_sq_wide | (sq_addr[i][4:2] == lq_sq_addr[4:2]))
             lq_sq_hit = 1;
       end
-
-      // terminate loop if we found a hit
-      if(lq_sq_hit)
-        i = 16;
-    end
   end
 
   wire lq_issue_req, sq_issue_req;
@@ -159,16 +165,14 @@ module lsq(
   wire wb_beat;
   assign wb_beat = lsq_wb_valid & ~wb_lsq_stall;
 
-  /*verilator lint_off WIDTH*/
   wire [3:0] lq_insert_idx, lq_addrgen_idx, lq_issue_idx, lq_remove_idx;
-  assign lq_insert_idx = $clog2(lq_insert_sel);
-  assign lq_addrgen_idx = $clog2(lq_addrgen_sel_r);
-  assign lq_issue_idx = $clog2(lq_issue_sel);
-  assign lq_remove_idx = $clog2(lq_remove_sel);
+  assign lq_insert_idx = encode16(lq_insert_sel);
+  assign lq_addrgen_idx = encode16(lq_addrgen_sel_r);
+  assign lq_issue_idx = encode16(lq_issue_sel);
+  assign lq_remove_idx = encode16(lq_remove_sel);
 
   wire [3:0] sq_addrgen_idx;
-  assign sq_addrgen_idx = $clog2(sq_addrgen_sel_r);
-  /*verilator lint_on WIDTH*/
+  assign sq_addrgen_idx = encode16(sq_addrgen_sel_r);
 
   // rename interface
   assign lsq_stall = ~rename_op[3] ? ~lq_insert_rdy : ~sq_insert_rdy;
@@ -318,9 +322,11 @@ module lsq(
             lq_base_rdy[j] <= 1;
             lq_base[j] <= wb_result;
 
+`ifndef SYNTHESIS
             top.tb_trace_lsq_base(
               {1'b0,j[3:0]},
               wb_result);
+`endif
           end
 
           if(lq_valid[j] & ~lq_op2_rdy[j] & (lq_op2[j][6:0] == wb_robid)) begin
@@ -369,22 +375,27 @@ module lsq(
               sq_base_rdy[k] <= 1;
               sq_base[k] <= wb_result;
 
+`ifndef SYNTHESIS
               top.tb_trace_lsq_base(
                 {1'b1,k[3:0]},
                 wb_result);
+`endif
             end
 
             if(~sq_data_rdy[k] & (sq_data[k][6:0] == wb_robid)) begin
               sq_data_rdy[k] <= 1;
               sq_data[k] <= wb_result;
 
+`ifndef SYNTHESIS
               top.tb_trace_lsq_wdata(
                 {1'b1,k[3:0]},
                 wb_result);
+`endif
             end
           end
     end
 
+`ifndef SYNTHESIS
   always @(posedge clk)
     if(rename_beat)
       top.tb_trace_lsq_dispatch(
@@ -399,5 +410,6 @@ module lsq(
       top.tb_log_lsq_inflight(
         lq_valid,
         sq_valid);
+`endif
 
 endmodule

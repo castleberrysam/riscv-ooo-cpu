@@ -11,10 +11,9 @@ module priarb #(
     grant_valid = 0;
     grant = 0;
     for(i = 0; i < WIDTH; i=i+1)
-      if(req[i]) begin
+      if(!grant_valid && req[i]) begin
         grant_valid = 1;
         grant[i] = 1;
-        i = WIDTH;
       end
   end
 

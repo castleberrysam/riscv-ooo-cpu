@@ -187,6 +187,7 @@ module bus(
     end
   end
 
+`ifndef SYNTHESIS
   always @(posedge clk)
     if(bus_valid) begin
       if(bus_cmd == `CMD_FILL || bus_cmd == `CMD_FLUSH)
@@ -199,5 +200,6 @@ module bus(
           bus_tag,
           bus_addr);
     end
+`endif
 
 endmodule

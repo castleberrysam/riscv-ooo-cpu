@@ -66,7 +66,7 @@ module queue_main #(
 
 
   wire wraparound = (buf_head_pol ^ buf_tail_pol);
-  wire pt_eq = (buf_head === buf_tail);
+  wire pt_eq = (buf_head == buf_tail);
 
   assign rdata_out = buf_valid0[buf_head] ? buf_addr0[buf_head] : buf_addr1[buf_head];
   assign queue_full = (wraparound & pt_eq);
