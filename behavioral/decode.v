@@ -275,6 +275,7 @@ module decode(
     if(valid & ~decode_stall)
       top.tb_trace_decode(
         decode_robid,
+        decode_rsop,
         insn,
         imm);
 

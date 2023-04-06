@@ -17,11 +17,14 @@ module top();
   import "DPI-C" task tb_log_rob_flush();
   import "DPI-C" task tb_mem_read(input bit [31:2] addr, output bit [31:0] rdata);
   import "DPI-C" task tb_trace_csr_write(input bit [6:0] robid, input bit [11:0] addr, input bit [31:0] data);
-  import "DPI-C" task tb_trace_decode(input bit [6:0] robid, input bit [31:0] insn, input bit [31:0] imm);
+  import "DPI-C" task tb_trace_decode(input bit [6:0] robid, input bit [4:0] rsop, input bit [31:0] insn, input bit [31:0] imm);
   import "DPI-C" task tb_trace_lsq_base(input bit [4:0] lsqid, input bit [31:0] base);
   import "DPI-C" task tb_trace_lsq_dispatch(input bit [6:0] robid, input bit [4:0] lsqid, input bit [3:0] op, input bit [31:0] base, input bit [31:0] wdata);
   import "DPI-C" task tb_trace_lsq_wdata(input bit [4:0] lsqid, input bit [31:0] wdata);
   import "DPI-C" task tb_trace_rob_retire(input bit [6:0] robid, input bit [6:0] retop, input bit [31:2] addr, input bit error, input bit mispred, input bit [4:0] ecause, input bit [5:0] rd, input bit [31:0] result);
+  import "DPI-C" task tb_trace_retire_stall(input bit [6:0] robid, input bit empty, input bit executed, input bit [6:0] retop);
+  import "DPI-C" task tb_trace_wb_stall(input bit wb_stall_scalu0, input bit wb_stall_scalu1, input bit wb_stall_mcalu0, input bit wb_stall_mcalu1, input bit wb_stall_lsq);
+  import "DPI-C" task tb_trace_dcache(input bit dc_req_write, input bit dc_req_hit, input bit dc_req_rd_fwd, input bit dc_req_rd_merge, input bit dc_req_wr_merge, input bit dc_req_alloc_mshr, input bit dc_req_hit_mshr);
   import "DPI-C" task tb_uart_tx(input bit [7:0] c);
 `else
   always
@@ -160,6 +163,7 @@ module top();
 
   task tb_trace_decode(
     input [6:0]  robid,
+    input [4:0]  rsop,
     input [31:0] insn,
     input [31:0] imm);
 
@@ -349,6 +353,76 @@ module top();
     end
   end
 
+  integer trace_retire_stall_empty;
+  integer trace_retire_stall_branch;
+  integer trace_retire_stall_alu;
+  integer trace_retire_stall_load;
+  integer trace_retire_stall_store;
+  integer trace_retire_stall_csr;
+  integer trace_retire_stall_other;
+  initial begin
+    trace_retire_stall_empty = 0;
+    trace_retire_stall_branch = 0;
+    trace_retire_stall_alu = 0;
+    trace_retire_stall_load = 0;
+    trace_retire_stall_store = 0;
+    trace_retire_stall_csr = 0;
+    trace_retire_stall_other = 0;
+  end
+
+  task tb_trace_retire_stall(
+    input [6:0] robid,
+    input       empty,
+    input       executed,
+    input [6:0] retop);
+    );
+
+    if(empty)
+      trace_retire_stall_empty += 1;
+    else if(~executed) begin
+      if(retop[4] | retop[6])
+        trace_retire_stall_branch += 1;
+      else if(trace_uses_mem[robid]) begin
+        if(~retop[3])
+          trace_retire_stall_load += 1;
+        else
+          trace_retire_stall_store += 1;
+      end else if(retop[5])
+        trace_retire_stall_csr += 1;
+      else
+        trace_retire_stall_alu += 1;
+    end else if(retop[3])
+      trace_retire_stall_store += 1;
+    else
+      trace_retire_stall_other += 1;
+  endtask
+
+  task tb_trace_wb_stall(
+    input wb_stall_scalu0,
+    input wb_stall_scalu1,
+    input wb_stall_mcalu0,
+    input wb_stall_mcalu1,
+    input wb_stall_lsq);
+
+    begin
+      // TOOD
+    end
+  endtask
+
+  task tb_trace_dcache(
+    input dc_req_write,
+    input dc_req_hit,
+    input dc_req_rd_fwd,
+    input dc_req_rd_merge,
+    input dc_req_wr_merge,
+    input dc_req_alloc_mshr,
+    input dc_req_hit_mshr);
+
+    begin
+      // TODO
+    end
+  endtask
+
   integer k;
   integer trace_cycles;
   task printstats();
@@ -374,6 +448,15 @@ module top();
       for(k = 0; k < 17; k=k+1)
         $write("%0d,", trace_sq_inflight_hist[k]);
       $display();
+
+      $display("Retire stall statistics:");
+      $display("STALL_EMPTY:  %0d", trace_retire_stall_empty);
+      $display("STALL_BRANCH: %0d", trace_retire_stall_branch);
+      $display("STALL_ALU:    %0d", trace_retire_stall_alu);
+      $display("STALL_LOAD:   %0d", trace_retire_stall_load);
+      $display("STALL_STORE:  %0d", trace_retire_stall_store);
+      $display("STALL_CSR:    %0d", trace_retire_stall_csr);
+      $display("STALL_OTHER:  %0d", trace_retire_stall_other);
     end
   endtask
 
@@ -494,5 +577,32 @@ module top();
     end
   endtask
 `endif
+
+  reg rob_rd_empty_r;
+  reg rob_buf_executed_r;
+  always @(posedge clk) begin
+    rob_rd_empty_r <= cpu.rob.ret_rd_empty;
+    rob_buf_executed_r <= cpu.rob.buf_executed[cpu.rob.ret_rd_addr];
+    if(~rst & ~cpu.rob.ret_valid)
+      tb_trace_retire_stall(cpu.rob.buf_head, rob_rd_empty_r, rob_buf_executed_r, cpu.rob.ret_retop);
+  end
+
+  always @(posedge clk)
+    if(~rst)
+      tb_trace_wb_stall(cpu.scalu0.scalu_stall,
+                        cpu.scalu1.scalu_stall,
+                        cpu.mcalu0.mcalu_stall & cpu.mcalu0.done,
+                        cpu.mcalu1.mcalu_stall & cpu.mcalu1.done,
+                        cpu.lsq.lsq_wb_valid & cpu.lsq.wb_lsq_stall);
+
+  always @(posedge clk)
+    if(~rst & cpu.dcache.s0_req_r & ~cpu.dcache.s0_inv_r & ~cpu.dcache.s0_stall & ~cpu.dcache.lsq_dc_flush)
+      tb_trace_dcache(cpu.dcache.s0_op_r[0],
+                      ~cpu.dcache.s0_tagmiss,
+                      cpu.dcache.s0_rd_forward,
+                      cpu.dcache.s0_rd_merge,
+                      cpu.dcache.s0_wr_merge,
+                      cpu.dcache.s0_mshr_alloc,
+                      cpu.dcache.s0_mshrhit);
 
 endmodule

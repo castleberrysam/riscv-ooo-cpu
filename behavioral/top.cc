@@ -91,6 +91,7 @@ static int return_code;
 
 typedef struct {
   uint32_t insn;
+  uint8_t  rsop;
   uint32_t imm;
   bool uses_mem;
   uint8_t memop;
@@ -114,6 +115,34 @@ static struct {
   unsigned rob_inflight_hist[ROB_SIZE+1];
   unsigned lq_inflight_hist[LQ_SIZE+1];
   unsigned sq_inflight_hist[SQ_SIZE+1];
+
+  unsigned retire_stall_empty;
+  unsigned retire_stall_branch;
+  unsigned retire_stall_scalu;
+  unsigned retire_stall_mcalu;
+  unsigned retire_stall_load;
+  unsigned retire_stall_store;
+  unsigned retire_stall_csr;
+  unsigned retire_stall_other;
+
+  unsigned wb_stall_scalu0;
+  unsigned wb_stall_scalu1;
+  unsigned wb_stall_mcalu0;
+  unsigned wb_stall_mcalu1;
+  unsigned wb_stall_lsq;
+
+  unsigned dc_read;
+  unsigned dc_read_hit;
+  unsigned dc_read_fwd;
+  unsigned dc_read_merge;
+  unsigned dc_read_alloc_mshr;
+  unsigned dc_read_hit_mshr;
+
+  unsigned dc_write;
+  unsigned dc_write_hit;
+  unsigned dc_write_merge;
+  unsigned dc_write_alloc_mshr;
+  unsigned dc_write_hit_mshr;
 } stats;
 
 static uint64_t bus_data[8];
@@ -234,6 +263,34 @@ static void print_stats() {
   for(int i = 0; i < SQ_SIZE+1; i++)
     printf("%d,", stats.sq_inflight_hist[i]);
   putchar('\n');
+
+  printf("RETIRE_STALL_EMPTY:  %d\n", stats.retire_stall_empty);
+  printf("RETIRE_STALL_BRANCH: %d\n", stats.retire_stall_branch);
+  printf("RETIRE_STALL_SCALU:  %d\n", stats.retire_stall_scalu);
+  printf("RETIRE_STALL_MCALU:  %d\n", stats.retire_stall_mcalu);
+  printf("RETIRE_STALL_LOAD:   %d\n", stats.retire_stall_load);
+  printf("RETIRE_STALL_STORE:  %d\n", stats.retire_stall_store);
+  printf("RETIRE_STALL_CSR:    %d\n", stats.retire_stall_csr);
+  printf("RETIRE_STALL_OTHER:  %d\n", stats.retire_stall_other);
+
+  printf("WB_STALL_SCALU0:     %d\n", stats.wb_stall_scalu0);
+  printf("WB_STALL_SCALU1:     %d\n", stats.wb_stall_scalu1);
+  printf("WB_STALL_MCALU0:     %d\n", stats.wb_stall_mcalu0);
+  printf("WB_STALL_MCALU1:     %d\n", stats.wb_stall_mcalu1);
+  printf("WB_STALL_LSQ:        %d\n", stats.wb_stall_lsq);
+
+  printf("DC_READ:             %d\n", stats.dc_read);
+  printf("DC_READ_HIT:         %d\n", stats.dc_read_hit);
+  printf("DC_READ_FWD:         %d\n", stats.dc_read_fwd);
+  printf("DC_READ_MERGE:       %d\n", stats.dc_read_merge);
+  printf("DC_READ_ALLOC_MSHR:  %d\n", stats.dc_read_alloc_mshr);
+  printf("DC_READ_HIT_MSHR:    %d\n", stats.dc_read_hit_mshr);
+
+  printf("DC_WRITE:            %d\n", stats.dc_write);
+  printf("DC_WRITE_HIT:        %d\n", stats.dc_write_hit);
+  printf("DC_WRITE_MERGE:      %d\n", stats.dc_write_merge);
+  printf("DC_WRITE_ALLOC_MSHR: %d\n", stats.dc_write_alloc_mshr);
+  printf("DC_WRITE_HIT_MSHR:   %d\n", stats.dc_write_hit_mshr);
 }
 
 static const char* get_csr_name(uint16_t addr) {
@@ -554,10 +611,13 @@ int tb_trace_csr_write(const svBitVecVal* robid, const svBitVecVal* addr,
   return 0;
 }
 
-int tb_trace_decode(const svBitVecVal* robid, const svBitVecVal* insn,
+int tb_trace_decode(const svBitVecVal* robid,
+                    const svBitVecVal* rsop,
+                    const svBitVecVal* insn,
                     const svBitVecVal* imm) {
   rob_trace_t& rob_entry = rob_trace[*robid];
   rob_entry.insn = *insn;
+  rob_entry.rsop = *rsop;
   rob_entry.imm = *imm;
   rob_entry.uses_mem = false;
   rob_entry.writes_csr = false;
@@ -665,6 +725,87 @@ int tb_trace_rob_retire(const svBitVecVal* robid, const svBitVecVal* retop,
      ((memaddr >> 2) == DBG_TOHOST)) {
     return_code = rob_entry.memdata >> 1;
     context->gotFinish(true);
+  }
+
+  return 0;
+}
+
+int tb_trace_retire_stall(const svBitVecVal* robid,
+                          const svBit empty, const svBit executed,
+                          const svBitVecVal* retop) {
+  rob_trace_t& rob_entry = rob_trace[*robid];
+  if(empty)
+    stats.retire_stall_empty++;
+  else if(~executed) {
+    if(((*retop >> 4) & 1) || ((*retop >> 6) & 1))
+      stats.retire_stall_branch++;
+    else if(rob_entry.uses_mem) {
+      if(!((*retop >> 3) & 1))
+        stats.retire_stall_load++;
+      else
+        stats.retire_stall_store++;
+    } else if((*retop >> 5) & 1)
+      stats.retire_stall_csr++;
+    else if(((rob_entry.rsop >> 3) & 0b11) == 0b11)
+      stats.retire_stall_mcalu++;
+    else
+      stats.retire_stall_scalu++;
+  } else if((*retop >> 3) & 1)
+    stats.retire_stall_store++;
+  else
+    stats.retire_stall_other++;
+
+  return 0;
+}
+
+int tb_trace_wb_stall(const svBit wb_stall_scalu0,
+                      const svBit wb_stall_scalu1,
+                      const svBit wb_stall_mcalu0,
+                      const svBit wb_stall_mcalu1,
+                      const svBit wb_stall_lsq) {
+  if(wb_stall_scalu0)
+    stats.wb_stall_scalu0++;
+  if(wb_stall_scalu1)
+    stats.wb_stall_scalu1++;
+  if(wb_stall_mcalu0)
+    stats.wb_stall_mcalu0++;
+  if(wb_stall_mcalu1)
+    stats.wb_stall_mcalu1++;
+  if(wb_stall_lsq)
+    stats.wb_stall_lsq++;
+
+  return 0;
+}
+
+int tb_trace_dcache(const svBit dc_req_write,
+                    const svBit dc_req_hit,
+                    const svBit dc_req_rd_fwd,
+                    const svBit dc_req_rd_merge,
+                    const svBit dc_req_wr_merge,
+                    const svBit dc_req_alloc_mshr,
+                    const svBit dc_req_hit_mshr) {
+  if(!dc_req_write) {
+    stats.dc_read++;
+    if(dc_req_hit)
+      stats.dc_read_hit++;
+    if(dc_req_rd_fwd)
+      stats.dc_read_fwd++;
+    if(dc_req_rd_merge)
+      stats.dc_read_merge++;
+    if(dc_req_alloc_mshr)
+      stats.dc_read_alloc_mshr++;
+    if(dc_req_hit_mshr)
+      stats.dc_read_hit_mshr++;
+  } else {
+    stats.dc_write++;
+    if(dc_req_hit)
+      stats.dc_write_hit++;
+    if(dc_req_wr_merge)
+      stats.dc_write_merge++;
+    if(dc_req_alloc_mshr)
+      stats.dc_write_alloc_mshr++;
+    if(dc_req_hit_mshr)
+      stats.dc_write_hit_mshr++;
   }
 
   return 0;
