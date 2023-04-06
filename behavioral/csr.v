@@ -47,6 +47,10 @@ module csr(
     MINSTRET  = 12'hB02,
     MCYCLEH   = 12'hB80,
     MINSTRETH = 12'hB82,
+    CYCLE     = 12'hC00,
+    INSTRET   = 12'hC02,
+    CYCLEH    = 12'hC80,
+    INSTRETH  = 12'hC82,
     MUARTSTAT = 12'hFC0,
     MUARTRX   = 12'hFC1,
     MUARTTX   = 12'h7C0,
@@ -122,10 +126,10 @@ module csr(
     sel_ml2stat = 0;
     sel_none = 0;
     casez(addr)
-      MCYCLE: sel_mcycle = 1;
-      MCYCLEH: sel_mcycleh = 1;
-      MINSTRET: sel_minstret = 1;
-      MINSTRETH: sel_minstreth = 1;
+      MCYCLE, CYCLE: sel_mcycle = 1;
+      MCYCLEH, CYCLEH: sel_mcycleh = 1;
+      MINSTRET, INSTRET: sel_minstret = 1;
+      MINSTRETH, INSTRETH: sel_minstreth = 1;
       MUARTSTAT: sel_muartstat = 1;
       MUARTRX: sel_muartrx = 1;
       MUARTTX: sel_muarttx = 1;
