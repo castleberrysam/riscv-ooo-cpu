@@ -1,6 +1,6 @@
 SIM := vcs
 DRAMSIM := $(shell pwd)/../dramsim
-SRCS := $(wildcard *.v) bfs/bfs_core.v bfs/bfs_queue.v bfs/queue_main.v bfs/queue_out.v
+SRCS := $(shell pwd)/../sim/top.v $(wildcard *.v) bfs/bfs_core.v bfs/bfs_queue.v bfs/queue_main.v bfs/queue_out.v
 
 ifeq ($(SIM),vcs)
 SRCS += $(DRAMSIM)/dramsim_vpi.cc
@@ -13,7 +13,7 @@ SIMOPTS += -o build/top
 build/top: $(SRCS) build/cpu.v $(DRAMSIM)/DRAMsim3/libdramsim3.a
 	$(SIM) $(SIMOPTS) $(SRCS) build/cpu.v
 else ifeq ($(SIM),verilator)
-SRCS += $(shell pwd)/top.cc $(DRAMSIM)/dramsim_verilator.cc
+SRCS += $(shell pwd)/../sim/top.cc $(DRAMSIM)/dramsim_verilator.cc
 SIMOPTS := --cc --exe --Mdir build --top top
 SIMOPTS += -CFLAGS "-I$(DRAMSIM) -I$(DRAMSIM)/DRAMsim3/src -march=native"
 SIMOPTS += -LDFLAGS "-L$(DRAMSIM)/DRAMsim3 -Wl,--push-state,--no-as-needed,--whole-archive -l:libdramsim3.a -Wl,--pop-state"
@@ -24,7 +24,7 @@ build/top: $(SRCS) build/cpu.v $(DRAMSIM)/DRAMsim3/libdramsim3.a
 	$(SIM) $(SIMOPTS) $(SRCS) build/cpu.v
 	$(MAKE) -C build -f Vtop.mk OPT_SLOW=-O2 OPT_FAST=-O3 OPT_GLOBAL=-O3
 else ifeq ($(SIM),iverilog)
-SRCS := timescale $(SRCS)
+SRCS := $(shell pwd)/../sim/timescale $(SRCS)
 SIMOPTS := -g2012 -s top
 SIMOPTS += -m$(DRAMSIM)/DRAMsim3/dramsim3.vpi
 SIMOPTS += -o build/top
