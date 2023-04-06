@@ -246,6 +246,11 @@ static const char* get_csr_name(uint16_t addr) {
 
 static void tick() {
   if(context->time() == dump_next_event) {
+    if(!dump_running) {
+      printf("INFO: starting dumping at time %lu\n", dump_next_event);
+    } else {
+      printf("INFO: stopping dumping at time %lu\n", dump_next_event);
+    }
     dump_running = !dump_running;
     if(!dump_events.empty()) {
       dump_next_event = dump_events.front();
