@@ -87,6 +87,8 @@ static FILE* uartfile;
 static FILE* tracefile;
 static FILE* logfile;
 
+static int return_code;
+
 typedef struct {
   uint32_t insn;
   uint32_t imm;
@@ -345,6 +347,8 @@ int main(int argc, char** argv) {
     double freq = ((double) context->time()) / ((stop - start) / CLOCKS_PER_SEC);
     printf("Simulation speed: %.3eHz\n", freq);
   }
+
+  printf("Application return code: %d\n", return_code);
 
  cleanup:
   delete dram;
@@ -654,6 +658,7 @@ int tb_trace_rob_retire(const svBitVecVal* robid, const svBitVecVal* retop,
   // HTIF tohost write termination
   if(!error && rob_entry.uses_mem && ((rob_entry.memop >> 3) & 1) &&
      ((memaddr >> 2) == DBG_TOHOST)) {
+    return_code = rob_entry.memdata >> 1;
     context->gotFinish(true);
   }
 
