@@ -43,6 +43,7 @@ module csr(
   input         l2fifo_l2_req);
 
   localparam
+    MTVEC     = 12'h305,
     MCYCLE    = 12'hB00,
     MINSTRET  = 12'hB02,
     MCYCLEH   = 12'hB80,
@@ -69,6 +70,7 @@ module csr(
     MUARTSTAT_TXFULL  = 32'h00000008;
 
   // Supported CSRs
+  reg [31:2] mtvec;
   reg [31:0] mcycle;
   reg [31:0] mcycleh;
   reg [31:0] minstret;
@@ -76,6 +78,7 @@ module csr(
   reg [7:0]  muarttx;
 
   // Updated CSR value
+  reg [31:2] mtvec_n;
   reg [31:0] mcycle_n; 
   reg [31:0] mcycleh_n;
   reg [31:0] minstret_n;
@@ -108,6 +111,7 @@ module csr(
     end
 
   // address decoder
+  reg sel_mtvec;
   reg sel_mcycle, sel_mcycleh;
   reg sel_minstret, sel_minstreth;
   reg sel_muartstat, sel_muartrx, sel_muarttx;
@@ -115,6 +119,7 @@ module csr(
   reg sel_ml2stat;
   reg sel_none;
   always @(*) begin
+    sel_mtvec = 0;
     sel_mcycle = 0;
     sel_mcycleh = 0;
     sel_minstret = 0;
@@ -126,6 +131,7 @@ module csr(
     sel_ml2stat = 0;
     sel_none = 0;
     casez(addr)
+      MTVEC: sel_mtvec = 1;
       MCYCLE, CYCLE: sel_mcycle = 1;
       MCYCLEH, CYCLEH: sel_mcycleh = 1;
       MINSTRET, INSTRET: sel_minstret = 1;
@@ -142,6 +148,7 @@ module csr(
   // read data mux
   always @(*)
     case(1)
+      sel_mtvec: csr_result = {mtvec,2'b0};
       sel_mcycle: csr_result = mcycle;
       sel_mcycleh: csr_result = mcycleh;
       sel_minstret: csr_result = minstret;
@@ -202,22 +209,23 @@ module csr(
   assign csr_error = sel_none | wr_error |
                      (bfs_req_r & (~bfs_csr_valid | bfs_csr_error));
   assign csr_ecause = 0; // TODO
-  assign csr_tvec = 0;
+  assign csr_tvec = mtvec;
 
   // CSR latching
-  always @(posedge clk) begin
-    mcycle <= mcycle_n;
-    mcycleh <= mcycleh_n;
-    minstret <= minstret_n;
-    minstreth <= minstreth_n;  
-    /* For Simulation Only */
-    if (rst) begin
+  always @(posedge clk)
+    if(rst) begin
+      mtvec <= 0;
       mcycle <= 0;
       mcycleh <= 0;
       minstret <= 0;
       minstreth <= 0;
+    end else begin
+      mtvec <= mtvec_n;
+      mcycle <= mcycle_n;
+      mcycleh <= mcycleh_n;
+      minstret <= minstret_n;
+      minstreth <= minstreth_n;
     end
-  end
 
   wire inc_minstret;
   assign inc_minstret = rob_ret_valid & ~(rob_ret_csr & (addr == MINSTRET));
@@ -230,6 +238,7 @@ module csr(
     // Active updates: CSR instructions (overrides passive)
     if(wen)
       case(1)
+        sel_mtvec: mtvec_n = wdata[31:2];
         sel_mcycle: mcycle_n = wdata;
         sel_mcycleh: mcycleh_n = wdata;
         sel_minstret: minstret_n = wdata;

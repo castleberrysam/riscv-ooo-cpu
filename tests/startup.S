@@ -52,6 +52,10 @@ _start:
 	mv	x30, zero
 	mv	x31, zero
 
+	# Set trap handler
+	la	a0, trap_handler
+	csrw	mtvec, a0
+
 	# Initialize stack
 	la	sp, _stack-8
 	sw	zero, 0(sp)
@@ -115,6 +119,10 @@ _start:
 
 	tail	exit
 	.size _start, .-_start
+
+trap_handler:
+	li	a0, 1
+	j	exit
 
 	.section .bss
 	.align 4
