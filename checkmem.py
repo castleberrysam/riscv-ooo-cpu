@@ -97,7 +97,10 @@ class MemoryTrace:
                         if fields[3] == "error":
                             self.entries[lsqids[lsqid]].rdata = "<error>"
                         else:
-                            rdata = int(fields[3], 16)
+                            try:
+                                rdata = int(fields[3], 16)
+                            except ValueError:
+                                rdata = fields[3]
                             self.entries[lsqids[lsqid]].rdata = rdata
                         lsqids[lsqid] = None
                 elif category == "flush":
@@ -150,10 +153,12 @@ def main() -> int:
     mismatch = memtrace.check()
     if mismatch:
         entry = mismatch[0]
-        if entry.rdata is not None:
+        if entry.rdata is None:
+            gotVal = "<no response>"
+        elif type(entry.rdata) == "int":
             gotVal = "{:08x}".format(entry.rdata)
         else:
-            gotVal = "<no response>"
+            gotVal = entry.rdata
         expectedVal = mismatch[1]
         print("FAIL checkmem at line {} ({}ns): {} {:08x} (got {}, expected {:08x})".format(
             entry.line, entry.time, entry.category, entry.addr, gotVal, expectedVal))
