@@ -3,7 +3,7 @@
 main:
 	li	t0, 0x20010000
 	li	t1, 0x00008000
-	li	t2, 0x28000000
+	li	t2, 0x20100000
 	li	t3, 0xdecafbad
 
 1:	sw	t3, 0(t0)

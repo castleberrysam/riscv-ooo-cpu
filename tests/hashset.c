@@ -5,9 +5,9 @@
 #include <time.h>
 
 #define TABLE_BASE_SIZE (1 << 10)
-#define TABLE_CT 9
+#define TABLE_CT 2
 #define VAL_RANGE 100000000
-#define SAMPLES 10000
+#define SAMPLES 100
 #define PHASH_SHF 20
 
 /* LINKED LIST */
