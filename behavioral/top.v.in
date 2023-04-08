@@ -3,6 +3,7 @@
 module top(
   /*AUTOINPUT*/
   /*AUTOOUTPUT*/
+  /*AUTOINOUT*/
 );
 
   /*AUTOWIRE*/
@@ -81,7 +82,21 @@ module top(
     .l2_bus_nack(bfs_bus_nack),
     /*AUTOINST*/);
 
-  dramctl dramctl(
+  dram_ctl #(
+    .CK_WIDTH(1),
+    .CKE_WIDTH(1),
+    .CS_WIDTH(1),
+    .nCS_PER_RANK(1),
+    .DM_WIDTH(2),
+    .ODT_WIDTH(1),
+    .DATA_WIDTH(16),
+    .BANK_WIDTH(3),
+    .ROW_WIDTH(14),
+    .COL_WIDTH(10),
+    .TAG_WIDTH(5),
+    .BUF_ENTRIES(16),
+    .CMD_PER_ENT(4)
+  ) u_dram_ctl(
     /*AUTOINST*/);
 
   rom rom(

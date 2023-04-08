@@ -2,11 +2,70 @@
 
 module tb_top();
 
-  reg clk/*verilator public*/;
-  reg rst/*verilator public*/;
-  top top(
+  reg         clk/*verilator public*/;
+  reg         rst/*verilator public*/;
+  reg         clk_ref_i;
+  reg         sys_clk_i;
+
+  tri [15:0]  ddr_dq;
+  tri [1:0]   ddr_dqs_n;
+  tri [1:0]   ddr_dqs_p;
+  wire [1:0]  ddr_dm;
+
+  wire [13:0] ddr_addr;
+  wire [2:0]  ddr_ba;
+  wire        ddr_cas_n;
+  wire        ddr_ck_n;
+  wire        ddr_ck_p;
+  wire        ddr_cke;
+  wire        ddr_cs_n;
+  wire        ddr_odt;
+  wire        ddr_ras_n;
+  wire        ddr_reset_n;
+  wire        ddr_we_n;
+
+  top top (
     .clk(clk),
-    .rst(rst));
+    .clk_ref_i(clk_ref_i),
+    .sys_clk_i(sys_clk_i),
+    .rst(rst),
+    .ddr_addr(ddr_addr),
+    .ddr_ba(ddr_ba),
+    .ddr_ras_n(ddr_ras_n),
+    .ddr_cas_n(ddr_cas_n),
+    .ddr_we_n(ddr_we_n),
+    .ddr_reset_n(ddr_reset_n),
+    .ddr_ck(ddr_ck_p),
+    .ddr_ck_n(ddr_ck_n),
+    .ddr_cke(ddr_cke),
+    .ddr_cs_n(ddr_cs_n),
+    .ddr_dm(ddr_dm),
+    .ddr_odt(ddr_odt),
+    .ddr_dq(ddr_dq),
+    .ddr_dqs(ddr_dqs_p),
+    .ddr_dqs_n(ddr_dqs_n),
+    .ddr_parity());
+
+  ddr3 #(
+    // .check_strict_timing(0),
+    // .STOP_ON_ERROR(0)
+  ) u_ddr3 (
+    .addr(ddr_addr),
+    .ba(ddr_ba),
+    .ras_n(ddr_ras_n),
+    .cas_n(ddr_cas_n),
+    .we_n(ddr_we_n),
+    .rst_n(ddr_reset_n),
+    .ck(ddr_ck_p),
+    .ck_n(ddr_ck_n),
+    .cke(ddr_cke),
+    .cs_n(ddr_cs_n),
+    .dm_tdqs(ddr_dm),
+    .tdqs_n(),
+    .odt(ddr_odt),
+    .dq(ddr_dq),
+    .dqs(ddr_dqs_p),
+    .dqs_n(ddr_dqs_n));
 
 `ifdef VERILATOR
   import "DPI-C" task tb_log_bus_cycle(input bit nack, input bit hit, input bit [2:0] cmd, input bit [4:0] tag, input bit [31:6] addr);
@@ -27,17 +86,28 @@ module tb_top();
   import "DPI-C" task tb_trace_dcache(input bit dc_req_write, input bit dc_req_hit, input bit dc_req_rd_fwd, input bit dc_req_rd_merge, input bit dc_req_wr_merge, input bit dc_req_alloc_mshr, input bit dc_req_hit_mshr);
   import "DPI-C" task tb_uart_tx(input bit [7:0] c);
 `else
+  // 100Mhz
   always
-    #0.5 clk = ~clk;
+    #5 clk = ~clk;
+  // 200MHz
+  always
+    #2.5 clk_ref_i = ~clk_ref_i;
+  // 100MHz
+  assign sys_clk_i = clk;
 
   initial begin
     $dumpfile("top.vcd");
-    $dumpvars;
-    $dumplimit(32*1024*1024*1024);
+    $dumpvars(1, top);
+    $dumpvars(0, top.bus, top.cpu, top.l2, top.rom,
+              top.u_dram_ctl.u_buf, top.u_dram_ctl.u_intf);
+    $dumplimit(64*1024*1024);
 
     clk = 1;
+    clk_ref_i = 1;
+    sys_clk_i = 1;
+
     rst = 1;
-    #10;
+    #100;
     rst = 0;
   end
 
@@ -110,9 +180,11 @@ module tb_top();
   task tb_uart_tx(
     input [7:0] char);
 
-    $fwrite(uartfd, "%c", char);
-    if(char == "\n")
-      $fflush(uartfd);
+    begin
+      $fwrite(uartfd, "%c", char);
+      if(char == "\n")
+        $fflush(uartfd);
+    end
   endtask
 
   integer tracefd, logfd;
@@ -375,26 +447,25 @@ module tb_top();
     input       empty,
     input       executed,
     input [6:0] retop);
-    );
 
     if(empty)
-      trace_retire_stall_empty += 1;
+      trace_retire_stall_empty = trace_retire_stall_empty + 1;
     else if(~executed) begin
       if(retop[4] | retop[6])
-        trace_retire_stall_branch += 1;
+        trace_retire_stall_branch = trace_retire_stall_branch + 1;
       else if(trace_uses_mem[robid]) begin
         if(~retop[3])
-          trace_retire_stall_load += 1;
+          trace_retire_stall_load = trace_retire_stall_load + 1;
         else
-          trace_retire_stall_store += 1;
+          trace_retire_stall_store = trace_retire_stall_store + 1;
       end else if(retop[5])
-        trace_retire_stall_csr += 1;
+        trace_retire_stall_csr = trace_retire_stall_csr + 1;
       else
-        trace_retire_stall_alu += 1;
+        trace_retire_stall_alu = trace_retire_stall_alu + 1;
     end else if(retop[3])
-      trace_retire_stall_store += 1;
+      trace_retire_stall_store = trace_retire_stall_store + 1;
     else
-      trace_retire_stall_other += 1;
+      trace_retire_stall_other = trace_retire_stall_other + 1;
   endtask
 
   task tb_trace_wb_stall(

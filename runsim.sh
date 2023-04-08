@@ -6,11 +6,13 @@ if [ $# -lt 1 ]; then
 fi
 
 DIR=$(dirname $0)
+DIR=$(realpath $DIR)
 TEST=$1
 MODEL=${2:-behavioral}
 
 DRAMCFG=$DIR/dramsim/DDR4_4Gb_x16_2666_2.ini
 HEXFILE=$DIR/tests/$TEST.hex
+TRACEFILE=$DIR/tests/$TEST.trace
 ELFFILE=$DIR/tests/$TEST.elf
 LOGFILE=$DIR/tests/$TEST.log
 UARTFILE=$DIR/tests/$TEST.out
@@ -18,17 +20,19 @@ UARTFILE=$DIR/tests/$TEST.out
 make -C $DIR/tests || exit $?
 make -C $DIR/$MODEL || exit $?
 
-TIMEOUT=100000
-
-#timeout $TIMEOUT $DIR/$MODEL/build/top +dramcfg=$DRAMCFG +memfile=$HEXFILE +uartfile=$UARTFILE +logfile=$LOGFILE &
-timeout $TIMEOUT $DIR/$MODEL/build/top +dramcfg=$DRAMCFG +memfile=$HEXFILE +uartfile=$UARTFILE +dumpon +dumpranges=30000000+500000 &
+$DIR/$MODEL/build/top \
+        --testplusarg dramcfg=$DRAMCFG \
+        --testplusarg memfile=$HEXFILE \
+        --testplusarg tracefile=$TRACEFILE \
+        --testplusarg uartfile=$UARTFILE \
+        --testplusarg logfile=$LOGFILE &
 SIMPID=$!
 
 ERROR=0
 
 wait $SIMPID
-if [ $? -eq 124 ]; then
-    echo "ERROR: rtl timed out"
+if [ $? -ne 0 ]; then
+    echo "ERROR: simulation returned non-zero"
     ERROR=1
 fi
 
