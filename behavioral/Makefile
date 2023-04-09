@@ -18,7 +18,7 @@ INCLUDES := $(CURDIR)
 INCLUDES += $(shell find $(MIG) -type d)
 INCLUDES += $(MICRON)
 
-DEFINES := den2048Mb sg125 x16
+DEFINES := den2048Mb sg125 x16 BFS_UNIT
 
 ifeq ($(SIM),vcs)
 SRCS += $(DRAMSIM)/dramsim_vpi.cc

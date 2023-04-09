@@ -50,6 +50,7 @@ module top(
     .l2_idle(),
     /*AUTOINST*/);
 
+`ifdef BFS_UNIT
   bfs_core bfs(
     /*AUTOINST*/);
 
@@ -81,6 +82,18 @@ module top(
     .l2_bus_hit(bfs_bus_hit),
     .l2_bus_nack(bfs_bus_nack),
     /*AUTOINST*/);
+`else
+  assign bfs_csr_valid = 0;
+  assign bfs_csr_error = 0;
+  assign bfs_csr_rdata = 0;
+  assign bfs_bus_req = 0;
+  assign bfs_bus_cmd = 0;
+  assign bfs_bus_tag = 0;
+  assign bfs_bus_addr = 0;
+  assign bfs_bus_data = 0;
+  assign bfs_bus_hit = 0;
+  assign bfs_bus_nack = 0;
+`endif
 
   dram_ctl #(
     .CK_WIDTH(1),
