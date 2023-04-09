@@ -1,79 +1,82 @@
 // reorder buffer and retirement unit
-module rob (
-    input         clk,
-    input         rst,
+module rob #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
-    // decode interface
-    input         decode_rob_valid,
-    input         decode_error,
-    input [1:0]   decode_ecause,
-    input [6:0]   decode_retop,
-    input [31:2]  decode_addr,
-    input [5:0]   decode_rd,
-    input [15:0]  decode_bptag,
-    input         decode_bptaken,
-    input         decode_forward,
-    input [31:2]  decode_target,
-    output        rob_full,
-    output [6:0]  rob_robid,
+  // decode interface
+  input                decode_rob_valid,
+  input                decode_error,
+  input [1:0]          decode_ecause,
+  input [6:0]          decode_retop,
+  input [31:2]         decode_addr,
+  input [5:0]          decode_rd,
+  input [15:0]         decode_bptag,
+  input                decode_bptaken,
+  input                decode_forward,
+  input [31:2]         decode_target,
+  output               rob_full,
+  output [ROBID_MSB:0] rob_robid,
 
-    // rename interface
-    input         rename_inhibit,
-    input [6:0]   rename_robid,
-    output        rob_rename_ishead,
+  // rename interface
+  input                rename_inhibit,
+  input [ROBID_MSB:0]  rename_robid,
+  output               rob_rename_ishead,
 
-    // wb interface
-    input         wb_valid,
-    input         wb_error,
-    input [4:0]   wb_ecause,
-    input [6:0]   wb_robid,
-    input [31:0]  wb_result,
+  // wb interface
+  input                wb_valid,
+  input                wb_error,
+  input [4:0]          wb_ecause,
+  input [ROBID_MSB:0]  wb_robid,
+  input [31:0]         wb_result,
 
-    // common signals
-    output        rob_flush,
+  // common signals
+  output               rob_flush,
 
-    // fetch interface
-    output [31:2] rob_flush_pc,
+  // fetch interface
+  output [31:2]        rob_flush_pc,
 
-    // rat interface
-    output        rob_ret_commit,
-    output [4:0]  rob_ret_rd,
-    output [31:0] rob_ret_result,
+  // rat interface
+  output               rob_ret_commit,
+  output [4:0]         rob_ret_rd,
+  output [31:0]        rob_ret_result,
 
-    // brpred interface
-    output        rob_ret_branch,
-    output [15:0] rob_ret_bptag,
-    output        rob_ret_bptaken,
+  // brpred interface
+  output               rob_ret_branch,
+  output [15:0]        rob_ret_bptag,
+  output               rob_ret_bptaken,
 
-    // lsq interface (out)
-    output        rob_ret_store,
+  // lsq interface (out)
+  output               rob_ret_store,
 
-    // csr interface
-    input [31:2]  csr_tvec,
-    output        rob_ret_valid,
-    output        rob_ret_csr,
-    output        rob_csr_valid,
-    output [31:2] rob_csr_epc,
-    output [4:0]  rob_csr_ecause,
-    output [31:0] rob_csr_tval
-);
+  // csr interface
+  input [31:2]         csr_tvec,
+  output               rob_ret_valid,
+  output               rob_ret_csr,
+  output               rob_csr_valid,
+  output [31:2]        rob_csr_epc,
+  output [4:0]         rob_csr_ecause,
+  output [31:0]        rob_csr_tval);
 
-  wire [     127:0] buf_executed;
-  wire [     127:0] buf_error;
-  wire [ 128*7-1:0] buf_retop;
-  wire [128*30-1:0] buf_addr;
-  wire [ 128*6-1:0] buf_rd;
-  wire [ 128*5-1:0] buf_ecause;
-  wire [128*32-1:0] buf_result;
-  wire [128*30-1:0] buf_target;
-  wire [128*16-1:0] buf_bptag;
-  wire [     127:0] buf_bptaken;
-  wire [     127:0] buf_forwarded;
+  localparam ROB_SIZE = 1 << (ROBID_MSB+1);
+
+  wire [ROB_SIZE-1:0]    buf_executed;
+  wire [ROB_SIZE-1:0]    buf_error;
+  wire [ROB_SIZE*7-1:0]  buf_retop;
+  wire [ROB_SIZE*30-1:0] buf_addr;
+  wire [ROB_SIZE*6-1:0]  buf_rd;
+  wire [ROB_SIZE*5-1:0]  buf_ecause;
+  wire [ROB_SIZE*32-1:0] buf_result;
+  wire [ROB_SIZE*30-1:0] buf_target;
+  wire [ROB_SIZE*16-1:0] buf_bptag;
+  wire [ROB_SIZE-1:0]    buf_bptaken;
+  wire [ROB_SIZE-1:0]    buf_forwarded;
 
   // insert at tail, remove at head
-  wire [6:0] buf_head, buf_tail;
-  wire buf_head_pol, buf_tail_pol;
-  wire [7:0] buf_head_next, buf_tail_next;
+  wire [ROBID_MSB:0]   buf_head, buf_tail;
+  wire                 buf_head_pol, buf_tail_pol;
+  wire [ROBID_MSB+1:0] buf_head_next, buf_tail_next;
 
   wire         ret_valid;
   wire         ret_error;
@@ -87,9 +90,9 @@ module rob (
   wire         ret_bptaken;
   wire         ret_forwarded;
 
-  wire [ 6:0] ret_rd_addr;
-  wire        ret_rd_addr_pol;
-  wire        ret_rd_empty;
+  wire [ROBID_MSB:0] ret_rd_addr;
+  wire               ret_rd_addr_pol;
+  wire               ret_rd_empty;
   assign ret_rd_empty = (ret_rd_addr == buf_tail) & (ret_rd_addr_pol == buf_tail_pol);
 
   // derived signals
@@ -142,30 +145,30 @@ module rob (
   assign rob_ret_store = rob_ret_valid & ret_retop[3];
 
   // forward buf_head when reading consecutive addrs
-  inc #(8) buf_head_inc ({buf_head_pol, buf_head}, buf_head_next);
-  mux #(7, 2) ret_rd_addr_mux(ret_valid, {buf_head_next[6:0], buf_head}, ret_rd_addr);
-  mux #(1, 2) ret_rd_addr_pol_mux(ret_valid, {buf_head_next[7], buf_head_pol}, ret_rd_addr_pol);
+  inc #(ROBID_MSB+2) buf_head_inc ({buf_head_pol, buf_head}, buf_head_next);
+  mux #(ROBID_MSB+1,2) ret_rd_addr_mux(ret_valid, {buf_head_next[ROBID_MSB:0], buf_head}, ret_rd_addr);
+  mux #(1,2) ret_rd_addr_pol_mux(ret_valid, {buf_head_next[ROBID_MSB+1], buf_head_pol}, ret_rd_addr_pol);
 
-  flop #(8) buf_head_flop(clk, rst | rob_flush, 0, ret_valid, buf_head_next, {buf_head_pol, buf_head});
+  flop #(ROBID_MSB+2) buf_head_flop(clk, rst | rob_flush, 0, ret_valid, buf_head_next, {buf_head_pol, buf_head});
 
   // buf_tail
-  inc #(8) buf_tail_inc ({buf_tail_pol, buf_tail}, buf_tail_next);
-  flop #(8) buf_tail_flop(clk, rst | rob_flush, 0, decode_beat, buf_tail_next, {buf_tail_pol, buf_tail});
+  inc #(ROBID_MSB+2) buf_tail_inc ({buf_tail_pol, buf_tail}, buf_tail_next);
+  flop #(ROBID_MSB+2) buf_tail_flop(clk, rst | rob_flush, 0, decode_beat, buf_tail_next, {buf_tail_pol, buf_tail});
 
   wire rename_inhibit_r;
   flop rename_inhibit_flop(clk, rst | rob_flush, 0, 1, rename_inhibit, rename_inhibit_r);
 
-  wire [127:0] buf_tail_splat, wb_robid_splat, ret_rd_addr_splat;
+  wire [ROB_SIZE-1:0] buf_tail_splat, wb_robid_splat, ret_rd_addr_splat;
   // TODO: replace decoders with onehot
-  decoder #(7) buf_tail_decoder(buf_tail, buf_tail_splat);
-  decoder #(7) wb_robid_decoder(wb_robid, wb_robid_splat);
-  decoder #(7) ret_rd_addr_decoder(ret_rd_addr, ret_rd_addr_splat);
-  wire [127:0] buf_tail_en = {128{decode_beat}} & buf_tail_splat;
-  wire [127:0] wb_robid_en = {128{wb_valid & ~rename_inhibit_r}} & wb_robid_splat;
+  decoder #(ROBID_MSB+1) buf_tail_decoder(buf_tail, buf_tail_splat);
+  decoder #(ROBID_MSB+1) wb_robid_decoder(wb_robid, wb_robid_splat);
+  decoder #(ROBID_MSB+1) ret_rd_addr_decoder(ret_rd_addr, ret_rd_addr_splat);
+  wire [ROB_SIZE-1:0] buf_tail_en = {ROB_SIZE{decode_beat}} & buf_tail_splat;
+  wire [ROB_SIZE-1:0] wb_robid_en = {ROB_SIZE{wb_valid & ~rename_inhibit_r}} & wb_robid_splat;
 
   genvar i;
   generate
-    for (i = 0; i < 128; i = i + 1) begin
+    for (i = 0; i < ROB_SIZE; i = i + 1) begin
       // dual write
       flop buf_executed_flop(clk, 0, 0, buf_tail_en[i] | wb_robid_en[i],
         buf_tail_en[i] & (decode_error | decode_retop[3]) | wb_robid_en[i], buf_executed[i]);
@@ -198,17 +201,17 @@ module rob (
   wire [15:0] read_bptag;
   wire        read_bptaken;
   wire        read_forwarded;
-  premux #(1, 128) buf_executed_mux(ret_rd_addr_splat, buf_executed, read_executed);
-  premux #(1, 128) buf_error_mux(ret_rd_addr_splat, buf_error, read_error);
-  premux #(7, 128) buf_retop_mux(ret_rd_addr_splat, buf_retop, read_retop);
-  premux #(30, 128) buf_addr_mux(ret_rd_addr_splat, buf_addr, read_addr);
-  premux #(6, 128) buf_rd_mux(ret_rd_addr_splat, buf_rd, read_rd);
-  premux #(5, 128) buf_ecause_mux(ret_rd_addr_splat, buf_ecause, read_ecause);
-  premux #(32, 128) buf_result_mux(ret_rd_addr_splat, buf_result, read_result);
-  premux #(30, 128) buf_target_mux(ret_rd_addr_splat, buf_target, read_target);
-  premux #(16, 128) buf_bptag_mux(ret_rd_addr_splat, buf_bptag, read_bptag);
-  premux #(1, 128) buf_bptaken_mux(ret_rd_addr_splat, buf_bptaken, read_bptaken);
-  premux #(1, 128) buf_forwarded_mux(ret_rd_addr_splat, buf_forwarded, read_forwarded);
+  premux #(1,  ROB_SIZE) buf_executed_mux(ret_rd_addr_splat, buf_executed, read_executed);
+  premux #(1,  ROB_SIZE) buf_error_mux(ret_rd_addr_splat, buf_error, read_error);
+  premux #(7,  ROB_SIZE) buf_retop_mux(ret_rd_addr_splat, buf_retop, read_retop);
+  premux #(30, ROB_SIZE) buf_addr_mux(ret_rd_addr_splat, buf_addr, read_addr);
+  premux #(6,  ROB_SIZE) buf_rd_mux(ret_rd_addr_splat, buf_rd, read_rd);
+  premux #(5,  ROB_SIZE) buf_ecause_mux(ret_rd_addr_splat, buf_ecause, read_ecause);
+  premux #(32, ROB_SIZE) buf_result_mux(ret_rd_addr_splat, buf_result, read_result);
+  premux #(30, ROB_SIZE) buf_target_mux(ret_rd_addr_splat, buf_target, read_target);
+  premux #(16, ROB_SIZE) buf_bptag_mux(ret_rd_addr_splat, buf_bptag, read_bptag);
+  premux #(1,  ROB_SIZE) buf_bptaken_mux(ret_rd_addr_splat, buf_bptaken, read_bptaken);
+  premux #(1,  ROB_SIZE) buf_forwarded_mux(ret_rd_addr_splat, buf_forwarded, read_forwarded);
 
   flop ret_valid_flop(clk, rst | rob_flush, 0, 1,
       read_executed & ~ret_rd_empty & (~read_retop[3] | ~rob_rename_ishead), ret_valid);

@@ -1,88 +1,90 @@
 // load-store queue
-module lsq(
-  input         clk,
-  input         rst,
+module lsq #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
   // rename interface
-  input         rename_lsq_write,
-  input [3:0]   rename_op,
-  input [6:0]   rename_robid,
-  input [5:0]   rename_rd,
-  input         rename_op1ready,
-  input [31:0]  rename_op1,
-  input         rename_op2ready,
-  input [31:0]  rename_op2,
-  input [31:0]  rename_imm,
-  output        lsq_stall,
+  input                rename_lsq_write,
+  input [3:0]          rename_op,
+  input [ROBID_MSB:0]  rename_robid,
+  input [5:0]          rename_rd,
+  input                rename_op1ready,
+  input [31:0]         rename_op1,
+  input                rename_op2ready,
+  input [31:0]         rename_op2,
+  input [31:0]         rename_imm,
+  output               lsq_stall,
 
   // dcache interface
-  output        lsq_dc_req,
-  output [3:0]  lsq_dc_op,
-  output [31:0] lsq_dc_addr,
-  output [3:0]  lsq_dc_lsqid,
-  output [31:0] lsq_dc_wdata,
-  output        lsq_dc_flush,
-  input         dcache_lsq_ready,
-  input         dcache_lsq_valid,
-  input         dcache_lsq_error,
-  input [3:0]   dcache_lsq_lsqid,
-  input [31:0]  dcache_lsq_rdata,
+  output               lsq_dc_req,
+  output [3:0]         lsq_dc_op,
+  output [31:0]        lsq_dc_addr,
+  output [3:0]         lsq_dc_lsqid,
+  output [31:0]        lsq_dc_wdata,
+  output               lsq_dc_flush,
+  input                dcache_lsq_ready,
+  input                dcache_lsq_valid,
+  input                dcache_lsq_error,
+  input [3:0]          dcache_lsq_lsqid,
+  input [31:0]         dcache_lsq_rdata,
 
   // writeback interface (out)
-  output        lsq_wb_valid,
-  output        lsq_wb_error,
-  output [4:0]  lsq_wb_ecause,
-  output [6:0]  lsq_wb_robid,
-  output [5:0]  lsq_wb_rd,
-  output [31:0] lsq_wb_result,
-  input         wb_lsq_stall,
+  output               lsq_wb_valid,
+  output               lsq_wb_error,
+  output [4:0]         lsq_wb_ecause,
+  output [ROBID_MSB:0] lsq_wb_robid,
+  output [5:0]         lsq_wb_rd,
+  output [31:0]        lsq_wb_result,
+  input                wb_lsq_stall,
 
   // writeback interface (in)
-  input         wb_valid,
-  input         wb_error,
-  input [6:0]   wb_robid,
-  input [5:0]   wb_rd,
-  input [31:0]  wb_result,
+  input                wb_valid,
+  input                wb_error,
+  input [ROBID_MSB:0]  wb_robid,
+  input [5:0]          wb_rd,
+  input [31:0]         wb_result,
 
   // rob interface
-  input         rob_flush,
-  input         rob_ret_store);
+  input                rob_flush,
+  input                rob_ret_store);
 
   // load queue
-  wire [15:0]        lq_valid;
-  wire [15:0]        lq_base_rdy;
-  wire [15:0]        lq_addr_rdy;
-  wire [15:0]        lq_issued;
-  wire [15:0]        lq_complete;
-  wire [15:0]        lq_error;
-  wire [(5*16)-1:0]  lq_ecause;
-  wire [(3*16)-1:0]  lq_type;
-  wire [(7*16)-1:0]  lq_robid;
-  wire [(5*16)-1:0]  lq_rd;
-  wire [(32*16)-1:0] lq_base;
-  wire [(32*16)-1:0] lq_imm;
-  wire [(32*16)-1:0] lq_addr;
-  wire [(32*16)-1:0] lq_data;
-  wire [15:0]        lq_op2_rdy;
-  wire [(8*16)-1:0]  lq_op2;
+  wire [15:0]                   lq_valid;
+  wire [15:0]                   lq_base_rdy;
+  wire [15:0]                   lq_addr_rdy;
+  wire [15:0]                   lq_issued;
+  wire [15:0]                   lq_complete;
+  wire [15:0]                   lq_error;
+  wire [(5*16)-1:0]             lq_ecause;
+  wire [(3*16)-1:0]             lq_type;
+  wire [((ROBID_MSB+1)*16)-1:0] lq_robid;
+  wire [(5*16)-1:0]             lq_rd;
+  wire [(32*16)-1:0]            lq_base;
+  wire [(32*16)-1:0]            lq_imm;
+  wire [(32*16)-1:0]            lq_addr;
+  wire [(32*16)-1:0]            lq_data;
+  wire [15:0]                   lq_op2_rdy;
+  wire [(8*16)-1:0]             lq_op2;
 
-  wire        lq_insert_rdy;
-  wire        lq_insert_beat;
-  wire [15:0] lq_insert_sel;
-  wire [15:0] lq_insert_en;
+  wire               lq_insert_rdy;
+  wire               lq_insert_beat;
+  wire [15:0]        lq_insert_sel;
+  wire [15:0]        lq_insert_en;
 
-  wire        lq_issue_rdy;
-  wire        lq_issue_req;
-  wire        lq_issue_beat;
-  wire [15:0] lq_issue_sel;
-  wire [15:0] lq_issue_en;
+  wire               lq_issue_rdy;
+  wire               lq_issue_req;
+  wire               lq_issue_beat;
+  wire [15:0]        lq_issue_sel;
+  wire [15:0]        lq_issue_en;
 
-  wire        lq_remove_rdy;
-  wire [15:0] lq_remove_sel;
-  wire [15:0] lq_remove_en;
+  wire               lq_remove_rdy;
+  wire [15:0]        lq_remove_sel;
+  wire [15:0]        lq_remove_en;
 
-  wire [15:0] lq_sq_sel;
-  wire        lq_sq_hit;
+  wire [15:0]        lq_sq_sel;
+  wire               lq_sq_hit;
 
   // store queue
   wire [15:0]        sq_valid;
@@ -154,7 +156,7 @@ module lsq(
   assign lsq_wb_valid = lq_remove_rdy;
   premux #(1,16) lq_error_mux(lq_remove_sel, lq_error, lsq_wb_error);
   premux #(5,16) lq_ecause_mux(lq_remove_sel, lq_ecause, lsq_wb_ecause);
-  premux #(7,16) lq_robid_mux(lq_remove_sel, lq_robid, lsq_wb_robid);
+  premux #(ROBID_MSB+1,16) lq_robid_mux(lq_remove_sel, lq_robid, lsq_wb_robid);
   premux #(5,16) lq_rd_mux(lq_remove_sel, lq_rd, lsq_wb_rd[4:0]);
   assign lsq_wb_rd[5] = 0;
   premux #(32,16) lq_data_mux(lq_remove_sel, lq_data, lsq_wb_result);
@@ -239,7 +241,7 @@ module lsq(
     .d(rename_op[2:0]),
     .q(lq_type));
 
-  flop #(7) lq_robid_r[15:0](
+  flop #(ROBID_MSB+1) lq_robid_r[15:0](
     .clk(clk),
     .rst(1'b0),
     .set(1'b0),
@@ -269,7 +271,7 @@ module lsq(
   wire [15:0] lq_base_cmp;
   generate
     for(i = 0; i < 16; i=i+1)
-      assign lq_base_cmp[i] = ~|(lq_base[i*32+:7] ^ wb_robid);
+      assign lq_base_cmp[i] = ~|(lq_base[i*32+:ROBID_MSB+1] ^ wb_robid);
   endgenerate
 
   wire [15:0] lq_base_fwd_en = {16{wb_en}} & lq_valid & ~lq_base_rdy & lq_base_cmp;
@@ -301,7 +303,7 @@ module lsq(
   wire [15:0] lq_op2_cmp;
   generate
     for(i = 0; i < 16; i=i+1)
-      assign lq_op2_cmp[i] = ~|(lq_op2[i*8+:7] ^ wb_robid);
+      assign lq_op2_cmp[i] = ~|(lq_op2[i*8+:ROBID_MSB+1] ^ wb_robid);
   endgenerate
 
   wire [15:0] lq_op2_fwd_en = {16{wb_en}} & lq_valid & ~lq_op2_rdy & lq_op2_cmp;
@@ -561,7 +563,7 @@ module lsq(
   wire [15:0] sq_base_cmp;
   generate
     for(i = 0; i < 16; i=i+1)
-      assign sq_base_cmp[i] = ~|(sq_base[i*32+:7] ^ wb_robid);
+      assign sq_base_cmp[i] = ~|(sq_base[i*32+:ROBID_MSB+1] ^ wb_robid);
   endgenerate
 
   wire [15:0] sq_base_fwd_en = {16{wb_en}} & sq_valid & ~sq_base_rdy & sq_base_cmp;
@@ -612,7 +614,7 @@ module lsq(
   wire [15:0] sq_data_cmp;
   generate
     for(i = 0; i < 16; i=i+1)
-      assign sq_data_cmp[i] = ~|(sq_data[i*32+:7] ^ wb_robid);
+      assign sq_data_cmp[i] = ~|(sq_data[i*32+:ROBID_MSB+1] ^ wb_robid);
   endgenerate
 
   wire [15:0] sq_data_fwd_en = {16{wb_en}} & sq_valid & ~sq_data_rdy & sq_data_cmp;

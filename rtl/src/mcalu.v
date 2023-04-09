@@ -1,42 +1,44 @@
 // multi-cycle alu
-module mcalu(
-  input             clk,
-  input             rst,
+module mcalu #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
   // exers interface
-  input             exers_mcalu_issue,
-  input [4:0]       exers_mcalu_op,
-  input [6:0]       exers_robid,
-  input [5:0]       exers_rd,
-  input [31:0]      exers_op1,
-  input [31:0]      exers_op2,
-  output            mcalu_stall,
+  input                exers_mcalu_issue,
+  input [4:0]          exers_mcalu_op,
+  input [ROBID_MSB:0]  exers_robid,
+  input [5:0]          exers_rd,
+  input [31:0]         exers_op1,
+  input [31:0]         exers_op2,
+  output               mcalu_stall,
 
   // wb interface
-  output            mcalu_valid,
-  output            mcalu_error,
-  output [4:0]      mcalu_ecause,
-  output [6:0]      mcalu_robid,
-  output [5:0]      mcalu_rd,
-  output [31:0]     mcalu_result,
-  input             wb_mcalu_stall,
+  output               mcalu_valid,
+  output               mcalu_error,
+  output [4:0]         mcalu_ecause,
+  output [ROBID_MSB:0] mcalu_robid,
+  output [5:0]         mcalu_rd,
+  output [31:0]        mcalu_result,
+  input                wb_mcalu_stall,
 
   // rob interface
-  input             rob_flush);
+  input                rob_flush);
 
-  wire        valid;
-  wire [4:0]  op;
-  wire [6:0]  robid;
-  wire [5:0]  rd;
-  wire [31:0] op1;
-  wire [31:0] op2;
+  wire               valid;
+  wire [4:0]         op;
+  wire [ROBID_MSB:0] robid;
+  wire [5:0]         rd;
+  wire [31:0]        op1;
+  wire [31:0]        op2;
   // Stage latches
   flop valid_flop (.clk(clk), .set(1'b0), .rst(rst|rob_flush), .enable(~mcalu_stall),
     .d(exers_mcalu_issue), .q(valid));
 
   flop #(5) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
     .d(exers_mcalu_op), .q(op));
-  flop #(7) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
+  flop #(ROBID_MSB+1) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
     .d(exers_robid), .q(robid));
   flop #(6) rd_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
     .d(exers_rd), .q(rd));

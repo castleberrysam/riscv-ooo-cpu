@@ -67,6 +67,9 @@ module tb_top();
     .dqs(ddr_dqs_p),
     .dqs_n(ddr_dqs_n));
 
+  localparam ROBID_MSB = 4;
+  localparam ROB_SIZE = 1 << (ROBID_MSB+1);
+
 `ifdef VERILATOR
   import "DPI-C" task tb_log_bus_cycle(input bit nack, input bit hit, input bit [2:0] cmd, input bit [4:0] tag, input bit [31:6] addr);
   import "DPI-C" task tb_log_bus_data(input bit [2:0] index, input bit [63:0] data);
@@ -194,33 +197,33 @@ module tb_top();
   end
 
   // indexed by robid
-  reg [31:0]  trace_insn [0:127];
-  reg [31:0]  trace_imm [0:127];
-  reg [127:0] trace_uses_mem;
-  reg [3:0]   trace_memop [0:127];
-  reg [31:0]  trace_membase [0:127];
-  reg [31:0]  trace_memdata [0:127];
-  reg [127:0] trace_writes_csr;
+  reg [31:0]         trace_insn [0:ROB_SIZE-1];
+  reg [31:0]         trace_imm [0:ROB_SIZE-1];
+  reg [ROB_SIZE-1:0] trace_uses_mem;
+  reg [3:0]          trace_memop [0:ROB_SIZE-1];
+  reg [31:0]         trace_membase [0:ROB_SIZE-1];
+  reg [31:0]         trace_memdata [0:ROB_SIZE-1];
+  reg [ROB_SIZE-1:0] trace_writes_csr;
   // reuse trace_membase for csr address
   // reuse trace_memdata for csr data
 
   // indexed by lsqid
-  reg [6:0]   trace_robid [0:31];
+  reg [ROBID_MSB:0] trace_robid [0:31];
 
-  integer     j;
-  integer     trace_instret;
-  integer     trace_branches;
-  integer     trace_mispreds;
-  integer     trace_rob_inflight;
-  integer     trace_rob_inflight_hist [0:128];
-  integer     trace_lq_inflight_hist [0:16];
-  integer     trace_sq_inflight_hist [0:16];
+  integer j;
+  integer trace_instret;
+  integer trace_branches;
+  integer trace_mispreds;
+  integer trace_rob_inflight;
+  integer trace_rob_inflight_hist [0:ROB_SIZE];
+  integer trace_lq_inflight_hist [0:16];
+  integer trace_sq_inflight_hist [0:16];
   initial begin
     trace_instret = 0;
     trace_branches = 0;
     trace_mispreds = 0;
     trace_rob_inflight = 0;
-    for(j = 0; j < 129; j=j+1)
+    for(j = 0; j <= ROB_SIZE; j=j+1)
       trace_rob_inflight_hist[j] = 0;
     for(j = 0; j < 17; j=j+1) begin
       trace_lq_inflight_hist[j] = 0;
@@ -234,10 +237,10 @@ module tb_top();
         = trace_rob_inflight_hist[trace_rob_inflight] + 1;
 
   task tb_trace_decode(
-    input [6:0]  robid,
-    input [4:0]  rsop,
-    input [31:0] insn,
-    input [31:0] imm);
+    input [ROBID_MSB:0] robid,
+    input [4:0]         rsop,
+    input [31:0]        insn,
+    input [31:0]        imm);
 
     begin
       trace_insn[robid] = insn;
@@ -250,11 +253,11 @@ module tb_top();
   endtask
 
   task tb_trace_lsq_dispatch(
-    input [6:0] robid,
-    input [4:0] lsqid,
-    input [3:0] op,
-    input [31:0] base,
-    input [31:0] wdata);
+    input [ROBID_MSB:0] robid,
+    input [4:0]         lsqid,
+    input [3:0]         op,
+    input [31:0]        base,
+    input [31:0]        wdata);
 
     begin
       trace_robid[lsqid] = robid;
@@ -269,7 +272,7 @@ module tb_top();
     input [4:0]  lsqid,
     input [31:0] base);
 
-    reg [6:0] robid;
+    reg [ROBID_MSB:0] robid;
     begin
       robid = trace_robid[lsqid];
       trace_membase[robid] = base;
@@ -280,7 +283,7 @@ module tb_top();
     input [4:0]  lsqid,
     input [31:0] wdata);
 
-    reg [6:0] robid;
+    reg [ROBID_MSB:0] robid;
     begin
       robid = trace_robid[lsqid];
       trace_memdata[robid] = wdata;
@@ -288,9 +291,9 @@ module tb_top();
   endtask
 
   task tb_trace_csr_write(
-    input [6:0]  robid,
-    input [11:0] addr,
-    input [31:0] data);
+    input [ROBID_MSB:0] robid,
+    input [11:0]        addr,
+    input [31:0]        data);
 
     // reuse trace_membase for csr address
     // reuse trace_memdata for csr data
@@ -347,14 +350,14 @@ module tb_top();
 
   integer watchdog;
   task tb_trace_rob_retire(
-    input [6:0]  robid,
-    input [6:0]  retop,
-    input [31:2] addr,
-    input        error,
-    input        mispred,
-    input [4:0]  ecause,
-    input [5:0]  rd,
-    input [31:0] result);
+    input [ROBID_MSB:0] robid,
+    input [6:0]         retop,
+    input [31:2]        addr,
+    input               error,
+    input               mispred,
+    input [4:0]         ecause,
+    input [5:0]         rd,
+    input [31:0]        result);
 
     reg [31:0] memaddr;
     begin
@@ -443,10 +446,10 @@ module tb_top();
   end
 
   task tb_trace_retire_stall(
-    input [6:0] robid,
-    input       empty,
-    input       executed,
-    input [6:0] retop);
+    input [ROBID_MSB:0] robid,
+    input               empty,
+    input               executed,
+    input [6:0]         retop);
 
     if(empty)
       trace_retire_stall_empty = trace_retire_stall_empty + 1;
@@ -506,7 +509,7 @@ module tb_top();
       $display("Branch prediction accuracy: %.2f", 1.0 - ($itor(trace_mispreds) / $itor(trace_branches)));
 
       $write("ROB occupancy histogram: ");
-      for(k = 0; k < 129; k=k+1)
+      for(k = 0; k <= ROB_SIZE; k=k+1)
         $write("%0d,", trace_rob_inflight_hist[k]);
       $display();
 

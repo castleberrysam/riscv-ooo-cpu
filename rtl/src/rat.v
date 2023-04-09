@@ -1,43 +1,45 @@
 // register alias table
-module rat(
-  input             clk,
-  input             rst,
+module rat #(
+  parameter ROBID_MSB = 4
+  )(
+  input               clk,
+  input               rst,
 
   // rename interface
-  input [4:0]       rename_rs1,
-  input [4:0]       rename_rs2,
-  input             rename_alloc,
-  input [4:0]       rename_rd,
-  input [6:0]       rename_robid,
-  output            rat_rs1_valid,
-  output [31:0] rat_rs1_tagval,
-  output            rat_rs2_valid,
-  output [31:0] rat_rs2_tagval,
+  input [4:0]         rename_rs1,
+  input [4:0]         rename_rs2,
+  input               rename_alloc,
+  input [4:0]         rename_rd,
+  input [ROBID_MSB:0] rename_robid,
+  output              rat_rs1_valid,
+  output [31:0]       rat_rs1_tagval,
+  output              rat_rs2_valid,
+  output [31:0]       rat_rs2_tagval,
 
   // wb interface
-  input             wb_valid,
-  input             wb_error,
-  input [6:0]       wb_robid,
-  input [5:0]       wb_rd,
-  input [31:0]      wb_result,
+  input               wb_valid,
+  input               wb_error,
+  input [ROBID_MSB:0] wb_robid,
+  input [5:0]         wb_rd,
+  input [31:0]        wb_result,
 
   // rob interface
-  input             rob_flush,
-  input             rob_ret_commit,
-  input [4:0]       rob_ret_rd,
-  input [31:0]      rob_ret_result);
+  input               rob_flush,
+  input               rob_ret_commit,
+  input [4:0]         rob_ret_rd,
+  input [31:0]        rob_ret_result);
 
-  wire [31:0] rat_valid;
-  wire [31:0] rat_committed;
-  wire [(32*32)-1:0] rat_comm_val;
-  wire [(32*32)-1:0] rat_spec_val;
-  wire [(7*32)-1:0] rat_tag;
+  wire [31:0]                   rat_valid;
+  wire [31:0]                   rat_committed;
+  wire [(32*32)-1:0]            rat_comm_val;
+  wire [(32*32)-1:0]            rat_spec_val;
+  wire [((ROBID_MSB+1)*32)-1:0] rat_tag;
 
-  wire        valid_rs1, valid_rs2;
-  wire        committed_rs1, committed_rs2;
-  wire [31:0] comm_val_rs1, comm_val_rs2;
-  wire [31:0] spec_val_rs1, spec_val_rs2;
-  wire [6:0]  tag_rs1, tag_rs2, tag_wb;
+  wire               valid_rs1, valid_rs2;
+  wire               committed_rs1, committed_rs2;
+  wire [31:0]        comm_val_rs1, comm_val_rs2;
+  wire [31:0]        spec_val_rs1, spec_val_rs2;
+  wire [ROBID_MSB:0] tag_rs1, tag_rs2, tag_wb;
 
   
   wire wb_write = wb_valid & ~wb_error & ~wb_rd[5] & (wb_robid == tag_wb);
@@ -101,12 +103,12 @@ module rat(
 
 
   // tag store read
-  premux #(7, 32) tag_rs1_mux (.sel(rs1_ohidx), .in(rat_tag), .out(tag_rs1));
-  premux #(7, 32) tag_rs2_mux (.sel(rs2_ohidx), .in(rat_tag), .out(tag_rs2));
-  premux #(7, 32) tag_wb_mux (.sel(wb_ohidx), .in(rat_tag), .out(tag_wb));
+  premux #(ROBID_MSB+1, 32) tag_rs1_mux (.sel(rs1_ohidx), .in(rat_tag), .out(tag_rs1));
+  premux #(ROBID_MSB+1, 32) tag_rs2_mux (.sel(rs2_ohidx), .in(rat_tag), .out(tag_rs2));
+  premux #(ROBID_MSB+1, 32) tag_wb_mux (.sel(wb_ohidx), .in(rat_tag), .out(tag_wb));
 
   // tag store write
-  flop #(7) rat_tag_flop [31:0]
+  flop #(ROBID_MSB+1) rat_tag_flop [31:0]
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(alloc_en), .d(rename_robid), .q(rat_tag));
 
 
@@ -117,7 +119,7 @@ module rat(
   // RS1 val
   wire [3:0] rs1_tagval_sel = {fwd_rs1, committed_rs1, 
     ~committed_rs1 & valid_rs1, ~fwd_rs1 & ~committed_rs1 & ~valid_rs1};
-  wire [(32*4)-1:0] rs1_tagval_in = {wb_result, comm_val_rs1, spec_val_rs1, 25'b0,tag_rs1};
+  wire [(32*4)-1:0] rs1_tagval_in = {wb_result, comm_val_rs1, spec_val_rs1, {32-(ROBID_MSB+1){1'b0}},tag_rs1};
   
   wire [31:0] rs1_tagval;
   premux #(32, 4) rat_rs1_tagval_mux (.sel(rs1_tagval_sel), 
@@ -127,7 +129,7 @@ module rat(
   // RS2 val
   wire [3:0] rs2_tagval_sel = {fwd_rs2, committed_rs2, 
     ~committed_rs2 & valid_rs2, ~fwd_rs2 & ~committed_rs2 & ~valid_rs2};
-  wire [(32*4)-1:0] rs2_tagval_in = {wb_result, comm_val_rs2, spec_val_rs2, 25'b0,tag_rs2};
+  wire [(32*4)-1:0] rs2_tagval_in = {wb_result, comm_val_rs2, spec_val_rs2, {32-(ROBID_MSB+1){1'b0}},tag_rs2};
   
   wire [31:0] rs2_tagval;
   premux #(32, 4) rat_rs2_tagval_mux (.sel(rs2_tagval_sel), 

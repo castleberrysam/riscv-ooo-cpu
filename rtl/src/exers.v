@@ -1,50 +1,51 @@
 // reservation stations for execute units (scalu/mcalu)
 module exers #(
+  parameter ROBID_MSB = 4,
   parameter RS_ENTRIES = 32
   )(
-  input         clk,
-  input         rst,
+  input                clk,
+  input                rst,
 
   // rename interface
-  input         rename_exers_write,
-  input [4:0]   rename_op,
-  input [6:0]   rename_robid,
-  input [5:0]   rename_rd,
-  input         rename_op1ready,
-  input [31:0]  rename_op1,
-  input         rename_op2ready,
-  input [31:0]  rename_op2,
-  output     exers_stall,
+  input                rename_exers_write,
+  input [4:0]          rename_op,
+  input [ROBID_MSB:0]  rename_robid,
+  input [5:0]          rename_rd,
+  input                rename_op1ready,
+  input [31:0]         rename_op1,
+  input                rename_op2ready,
+  input [31:0]         rename_op2,
+  output               exers_stall,
 
   // common scalu/mcalu signals
-  output [6:0]  exers_robid,
-  output [5:0]  exers_rd,
-  output [31:0] exers_op1,
-  output [31:0] exers_op2,
+  output [ROBID_MSB:0] exers_robid,
+  output [5:0]         exers_rd,
+  output [31:0]        exers_op1,
+  output [31:0]        exers_op2,
 
   // scalu interface
-  output        exers_scalu0_issue,
-  output        exers_scalu1_issue,
-  output [4:0]  exers_scalu_op,
-  input         scalu0_stall,
-  input         scalu1_stall,
+  output               exers_scalu0_issue,
+  output               exers_scalu1_issue,
+  output [4:0]         exers_scalu_op,
+  input                scalu0_stall,
+  input                scalu1_stall,
 
   // mcalu interface
-  output        exers_mcalu0_issue,
-  output        exers_mcalu1_issue,
-  output [4:0]  exers_mcalu_op,
-  input         mcalu0_stall,
-  input         mcalu1_stall,
+  output               exers_mcalu0_issue,
+  output               exers_mcalu1_issue,
+  output [4:0]         exers_mcalu_op,
+  input                mcalu0_stall,
+  input                mcalu1_stall,
 
   // wb interface
-  input         wb_valid,
-  input         wb_error,
-  input [6:0]   wb_robid,
-  input [5:0]   wb_rd,
-  input [31:0]  wb_result,
+  input                wb_valid,
+  input                wb_error,
+  input [ROBID_MSB:0]  wb_robid,
+  input [5:0]          wb_rd,
+  input [31:0]         wb_result,
 
   // rob interface
-  input         rob_flush);
+  input                rob_flush);
 
   genvar i;
   wire issue_valid;
@@ -52,17 +53,17 @@ module exers #(
   wire rs_full;
 
   wire resolve_valid = (wb_valid & (~wb_error) & (~wb_rd[5]));
-  
-  wire [RS_ENTRIES-1:0] rs_valid;
-  wire [(RS_ENTRIES*5)-1:0] rs_op;
-  wire [(RS_ENTRIES*6)-1:0] rs_rd;
-  wire [(RS_ENTRIES*7)-1:0] rs_robid;
 
-  wire [RS_ENTRIES-1:0] rs_op1ready;
-  wire [(RS_ENTRIES*32)-1:0] rs_op1;
-  wire [RS_ENTRIES-1:0] rs_op2ready;
-  wire [(RS_ENTRIES*32)-1:0] rs_op2;
-  
+  wire [RS_ENTRIES-1:0]                 rs_valid;
+  wire [(RS_ENTRIES*5)-1:0]             rs_op;
+  wire [(RS_ENTRIES*6)-1:0]             rs_rd;
+  wire [(RS_ENTRIES*(ROBID_MSB+1))-1:0] rs_robid;
+
+  wire [RS_ENTRIES-1:0]                 rs_op1ready;
+  wire [(RS_ENTRIES*32)-1:0]            rs_op1;
+  wire [RS_ENTRIES-1:0]                 rs_op2ready;
+  wire [(RS_ENTRIES*32)-1:0]            rs_op2;
+
   // One-hot insertion/issue vectors
   wire [RS_ENTRIES-1:0] issue_ohidx; // Assert issue_idx
   wire [RS_ENTRIES-1:0] insert_ohidx; // Assert insert_idx
@@ -77,9 +78,9 @@ module exers #(
   generate
     for (i = 0; i < RS_ENTRIES; i = i+1) begin : resolve_gen
       assign resolve_rsop1[i] = resolve_valid & rs_valid[i] & (~rs_op1ready[i]) & 
-                        (rs_op1[(32*i) +: 7] == wb_robid);
+                        (rs_op1[(32*i) +: ROBID_MSB+1] == wb_robid);
       assign resolve_rsop2[i] = resolve_valid & rs_valid[i] & (~rs_op2ready[i]) & 
-                        (rs_op2[(32*i) +: 7] == wb_robid);
+                        (rs_op2[(32*i) +: ROBID_MSB+1] == wb_robid);
     end
   endgenerate
 
@@ -92,7 +93,7 @@ module exers #(
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(insert_rs), .d(rename_op), .q(rs_op));
   flop #(6) rs_rd_flop [RS_ENTRIES-1:0]
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(insert_rs), .d(rename_rd), .q(rs_rd));
-  flop #(7) rs_robid_flop [RS_ENTRIES-1:0]
+  flop #(ROBID_MSB+1) rs_robid_flop [RS_ENTRIES-1:0]
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(insert_rs), .d(rename_robid), .q(rs_robid));
 
   // Set when resolve, write data-in when insert
@@ -148,7 +149,7 @@ module exers #(
     .out(insert_ohidx));
 
   // Outputs to issue
-  premux #(7, 32) exers_robid_mux (.sel(issue_ohidx), .in(rs_robid), .out(exers_robid));
+  premux #(ROBID_MSB+1, 32) exers_robid_mux (.sel(issue_ohidx), .in(rs_robid), .out(exers_robid));
   premux #(6, 32) exers_rd_mux (.sel(issue_ohidx), .in(rs_rd), .out(exers_rd));
   premux #(32, 32) exers_op1_mux (.sel(issue_ohidx), .in(rs_op1), .out(exers_op1));
   premux #(32, 32) exers_op2_mux (.sel(issue_ohidx), .in(rs_op2), .out(exers_op2));

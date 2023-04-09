@@ -1,86 +1,88 @@
 // register rename and instruction dispatch unit
-module rename(
-  input            clk,
-  input            rst,
+module rename #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
   // decode interface
-  input            decode_rename_valid,
-  input [31:2]     decode_addr,
-  input [4:0]      decode_rsop,
-  input [6:0]      decode_robid,
-  input [5:0]      decode_rd,
-  input            decode_uses_rs1,
-  input            decode_uses_rs2,
-  input            decode_uses_imm,
-  input            decode_uses_memory,
-  input            decode_uses_pc,
-  input            decode_csr_access,
-  input            decode_forward,
-  input            decode_inhibit,
-  input [31:2]     decode_target,
-  input [4:0]      decode_rs1,
-  input [4:0]      decode_rs2,
-  input [31:0]     decode_imm,
-  output           rename_stall,
+  input                decode_rename_valid,
+  input [31:2]         decode_addr,
+  input [4:0]          decode_rsop,
+  input [ROBID_MSB:0]  decode_robid,
+  input [5:0]          decode_rd,
+  input                decode_uses_rs1,
+  input                decode_uses_rs2,
+  input                decode_uses_imm,
+  input                decode_uses_memory,
+  input                decode_uses_pc,
+  input                decode_csr_access,
+  input                decode_forward,
+  input                decode_inhibit,
+  input [31:2]         decode_target,
+  input [4:0]          decode_rs1,
+  input [4:0]          decode_rs2,
+  input [31:0]         decode_imm,
+  output               rename_stall,
 
   // rat interface
-  output [4:0]     rename_rs1,
-  output [4:0]     rename_rs2,
-  output           rename_alloc,
-  input            rat_rs1_valid,
-  input [31:0]     rat_rs1_tagval,
-  input            rat_rs2_valid,
-  input [31:0]     rat_rs2_tagval,
+  output [4:0]         rename_rs1,
+  output [4:0]         rename_rs2,
+  output               rename_alloc,
+  input                rat_rs1_valid,
+  input [31:0]         rat_rs1_tagval,
+  input                rat_rs2_valid,
+  input [31:0]         rat_rs2_tagval,
 
   // common rat/dispatch/wb signals
-  output [5:0]      rename_rd,
-  output [6:0]      rename_robid,
+  output [5:0]         rename_rd,
+  output [ROBID_MSB:0] rename_robid,
 
   // exers/lsq/csr interface
-  output           rename_exers_write,
-  output           rename_lsq_write,
-  output           rename_csr_write,
-  output [4:0]     rename_op,
-  output           rename_op1ready,
-  output [31:0]    rename_op1,
-  output           rename_op2ready,
-  output [31:0]    rename_op2,
-  output [31:0]    rename_imm,
-  input            exers_stall,
-  input            lsq_stall,
-  input            csr_stall,
+  output               rename_exers_write,
+  output               rename_lsq_write,
+  output               rename_csr_write,
+  output [4:0]         rename_op,
+  output               rename_op1ready,
+  output [31:0]        rename_op1,
+  output               rename_op2ready,
+  output [31:0]        rename_op2,
+  output [31:0]        rename_imm,
+  input                exers_stall,
+  input                lsq_stall,
+  input                csr_stall,
 
   // wb interface
-  output rename_wb_valid,
-  output [31:2] rename_wb_result,
+  output               rename_wb_valid,
+  output [31:2]        rename_wb_result,
 
   // rob interface
-  input             rob_flush,
-  input             rob_rename_ishead,
-  output            rename_inhibit);
+  input                rob_flush,
+  input                rob_rename_ishead,
+  output               rename_inhibit);
 
   // decode signals
-  wire valid;
-  wire stall;
-  wire [6:0] robid;
-  wire [31:0] addr;
-  wire [4:0] op;
-  wire [5:0] rd;
-  wire uses_rs1;
-  wire uses_rs2;
-  wire uses_imm;
-  wire uses_memory;
-  wire uses_pc;
-  wire csr_access;
-  wire forward;
-  wire inhibit;
-  wire [31:2] result;
-  wire [4:0] rs1;
-  wire [4:0] rs2;
-  wire [31:0] imm;
+  wire               valid;
+  wire               stall;
+  wire [ROBID_MSB:0] robid;
+  wire [31:0]        addr;
+  wire [4:0]         op;
+  wire [5:0]         rd;
+  wire               uses_rs1;
+  wire               uses_rs2;
+  wire               uses_imm;
+  wire               uses_memory;
+  wire               uses_pc;
+  wire               csr_access;
+  wire               forward;
+  wire               inhibit;
+  wire [31:2]        result;
+  wire [4:0]         rs1;
+  wire [4:0]         rs2;
+  wire [31:0]        imm;
 
   flop valid_flop       (clk, rst | rob_flush, 0, !rename_stall, decode_rename_valid, valid);
-  flop #(7) robid_flop  (clk, 0, 0, !rename_stall, decode_robid, robid);
+  flop #(ROBID_MSB+1) robid_flop (clk, 0, 0, !rename_stall, decode_robid, robid);
   flop #(32) addr_flop  (clk, 0, 0, !rename_stall, {decode_addr, 2'b00}, addr);
   flop #(5) op_flop     (clk, 0, 0, !rename_stall, decode_rsop, op);
   flop #(6) rd_flop     (clk, 0, 0, !rename_stall, decode_rd, rd);

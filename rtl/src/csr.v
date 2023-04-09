@@ -1,47 +1,49 @@
 `include "rtldefs.vh"
 // csr (control and status register) unit
-module csr(
-  input         clk,
-  input         rst,
+module csr #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
   // rename interface
-  input         rename_csr_write,
-  input [4:0]   rename_op,
-  input [6:0]   rename_robid,
-  input [5:0]   rename_rd,
-  input [31:0]  rename_op1,
-  input [31:0]  rename_imm,
-  output        csr_stall,
+  input                rename_csr_write,
+  input [4:0]          rename_op,
+  input [ROBID_MSB:0]  rename_robid,
+  input [5:0]          rename_rd,
+  input [31:0]         rename_op1,
+  input [31:0]         rename_imm,
+  output               csr_stall,
 
   // wb interface
-  output            csr_valid,
-  output            csr_error,
-  output     [4:0]  csr_ecause,
-  output     [6:0]  csr_robid,
-  output     [5:0]  csr_rd,
-  output     [31:0] csr_result,
+  output               csr_valid,
+  output               csr_error,
+  output [4:0]         csr_ecause,
+  output [ROBID_MSB:0] csr_robid,
+  output [5:0]         csr_rd,
+  output [31:0]        csr_result,
 
   // rob interface
-  input         rob_flush,
-  input         rob_ret_valid,
-  input         rob_ret_csr,
-  input         rob_csr_valid,
-  input [31:2]  rob_csr_epc,
-  input [4:0]   rob_csr_ecause,
-  input [31:0]  rob_csr_tval,
-  output [31:2] csr_tvec,
+  input                rob_flush,
+  input                rob_ret_valid,
+  input                rob_ret_csr,
+  input                rob_csr_valid,
+  input [31:2]         rob_csr_epc,
+  input [4:0]          rob_csr_ecause,
+  input [31:0]         rob_csr_tval,
+  output [31:2]        csr_tvec,
 
   // bfs interface
-  output        csr_bfs_valid,
-  output [3:0]  csr_bfs_addr,
-  output        csr_bfs_wen,
-  output [31:0] csr_bfs_wdata,
-  input         bfs_csr_valid,
-  input         bfs_csr_error,
-  input [31:0]  bfs_csr_rdata,
+  output               csr_bfs_valid,
+  output [3:0]         csr_bfs_addr,
+  output               csr_bfs_wen,
+  output [31:0]        csr_bfs_wdata,
+  input                bfs_csr_valid,
+  input                bfs_csr_error,
+  input [31:0]         bfs_csr_rdata,
 
   // l2fifo interface
-  input         l2fifo_l2_req);
+  input                l2fifo_l2_req);
 
   localparam
     MTVEC     = 12'h305,
@@ -90,16 +92,17 @@ module csr(
   flop #(1) valid_flop (.clk(clk), .set(1'b0), .rst(rst), .enable(~csr_stall),
       .d(rename_csr_write), .q(valid));
 
-  wire [2:0] op;
-  wire [6:0] robid;
-  wire [5:0] rd;
-  wire [31:0] op1;
-  wire [11:0] addr;
+  wire [2:0]         op;
+  wire [ROBID_MSB:0] robid;
+  wire [5:0]         rd;
+  wire [31:0]        op1;
+  wire [11:0]        addr;
+
   wire stage_en = ~csr_stall & rename_csr_write;
 
   flop #(3) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
       .d(rename_op[2:0]), .q(op));
-  flop #(7) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
+  flop #(ROBID_MSB+1) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
       .d(rename_robid), .q(robid));
   flop #(6) rd_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
       .d(rename_rd), .q(rd));

@@ -1,35 +1,37 @@
 // single-cycle alu
-module scalu(
-  input         clk,
-  input         rst,
+module scalu #(
+  parameter ROBID_MSB = 4
+  )(
+  input                clk,
+  input                rst,
 
   // exers interface
-  input         exers_scalu_issue,
-  input [4:0]   exers_scalu_op,
-  input [6:0]   exers_robid,
-  input [5:0]   exers_rd,
-  input [31:0]  exers_op1,
-  input [31:0]  exers_op2,
-  output        scalu_stall,
+  input                exers_scalu_issue,
+  input [4:0]          exers_scalu_op,
+  input [ROBID_MSB:0]  exers_robid,
+  input [5:0]          exers_rd,
+  input [31:0]         exers_op1,
+  input [31:0]         exers_op2,
+  output               scalu_stall,
 
   // wb interface
-  output        scalu_valid,
-  output        scalu_error,
-  output [4:0]  scalu_ecause,
-  output [6:0]  scalu_robid,
-  output [5:0]  scalu_rd,
-  output [31:0] scalu_result,
-  input         wb_scalu_stall,
+  output               scalu_valid,
+  output               scalu_error,
+  output [4:0]         scalu_ecause,
+  output [ROBID_MSB:0] scalu_robid,
+  output [5:0]         scalu_rd,
+  output [31:0]        scalu_result,
+  input                wb_scalu_stall,
 
   // rob interface
-  input         rob_flush);
+  input                rob_flush);
 
-  reg valid;
-  reg[4:0] op;
-  reg[6:0] robid;
-  reg[5:0] rd;
-  reg[31:0] op1;
-  reg[31:0] op2;
+  reg               valid;
+  reg [4:0]         op;
+  reg [ROBID_MSB:0] robid;
+  reg [5:0]         rd;
+  reg [31:0]        op1;
+  reg [31:0]        op2;
 
   always @(posedge clk) begin
     if (rst | rob_flush) begin

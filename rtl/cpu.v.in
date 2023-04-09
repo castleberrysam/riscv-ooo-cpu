@@ -1,6 +1,9 @@
 `include "buscmd.vh"
 
-module cpu(
+module cpu #(
+  parameter ROBID_MSB = 4,
+  parameter RS_ENTRIES = 32
+  )(
   // Outputs
   output l2fifo_l2_req,
   /*AUTOINPUT*/
@@ -12,16 +15,22 @@ module cpu(
   brpred brpred(
     /*AUTOINST*/);
 
-  csr csr(
+  csr #(
+    /*AUTOINSTPARAM*/
+    ) csr (
     /*AUTOINST*/);
 
   dcache dcache(
     /*AUTOINST*/);
 
-  decode decode(
+  decode #(
+    /*AUTOINSTPARAM*/
+    ) decode (
     /*AUTOINST*/);
 
-  exers exers(
+  exers #(
+    /*AUTOINSTPARAM*/
+    ) exers (
     /*AUTOINST*/);
 
   fetch fetch(
@@ -30,7 +39,9 @@ module cpu(
   icache icache(
     /*AUTOINST*/);
 
-  lsq lsq(
+  lsq #(
+    /*AUTOINSTPARAM*/
+    ) lsq (
     /*AUTOINST*/);
 
   /*
@@ -46,19 +57,29 @@ module cpu(
    .wb_mcalu_stall(wb_mcalu@_stall));
    */
 
-  mcalu mcalu0(
+  mcalu #(
+    /*AUTOINSTPARAM*/
+    ) mcalu0 (
     /*AUTOINST*/);
 
-  mcalu mcalu1(
+  mcalu #(
+    /*AUTOINSTPARAM*/
+    ) mcalu1 (
     /*AUTOINST*/);
 
-  rat rat(
+  rat #(
+    /*AUTOINSTPARAM*/
+    ) rat (
     /*AUTOINST*/);
 
-  rename rename(
+  rename #(
+    /*AUTOINSTPARAM*/
+    ) rename (
     /*AUTOINST*/);
 
-  rob rob(
+  rob #(
+    /*AUTOINSTPARAM*/
+    ) rob (
     /*AUTOINST*/);
 
   /*
@@ -74,13 +95,19 @@ module cpu(
    .wb_scalu_stall(wb_scalu@_stall));
    */
 
-  scalu scalu0(
+  scalu #(
+    /*AUTOINSTPARAM*/
+    ) scalu0 (
     /*AUTOINST*/);
 
-  scalu scalu1(
+  scalu #(
+    /*AUTOINSTPARAM*/
+    ) scalu1 (
     /*AUTOINST*/);
 
-  wb wb(
+  wb #(
+    /*AUTOINSTPARAM*/
+    ) wb (
     /*AUTOINST*/);
 
   l2fifo l2fifo(
