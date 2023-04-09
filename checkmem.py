@@ -18,6 +18,8 @@ class MemoryEntry:
         self.wdata = wdata
 
 def getLoadResult(entry: MemoryEntry, memValue: int) -> int:
+    if type(memValue) != int:
+        return memValue
     memValue >>= (entry.addr & 3) * 8
     if entry.category == "lh":
         memValue = ((memValue & 0x7fff) - (memValue & 0x8000)) & 0xffffffff
@@ -30,6 +32,8 @@ def getLoadResult(entry: MemoryEntry, memValue: int) -> int:
     return memValue
 
 def getStoreResult(entry: MemoryEntry, memValue: int) -> int:
+    if type(entry.wdata) != int:
+        return entry.wdata
     shift = (entry.addr & 3) * 8
     regValue = entry.wdata << shift
     if entry.category == "sw":
@@ -83,7 +87,10 @@ class MemoryTrace:
                 elif category[0] == "s":
                     # sw/sh/sb (write)
                     addr = int(fields[2], 16)
-                    wdata = int(fields[3], 16)
+                    try:
+                        wdata = int(fields[3], 16)
+                    except ValueError:
+                        wdata = fields[3]
                     self.entries.append(MemoryEntry(linenum, time, category, addr, wdata))
                     if (category[1] == "h" and (addr & 1)) or (category[1] == "w" and (addr & 3)):
                         print("WARN: misaligned {} at line {} ({}ns)".format(category, linenum, time))
@@ -155,7 +162,7 @@ def main() -> int:
         entry = mismatch[0]
         if entry.rdata is None:
             gotVal = "<no response>"
-        elif type(entry.rdata) == "int":
+        elif type(entry.rdata) == int:
             gotVal = "{:08x}".format(entry.rdata)
         else:
             gotVal = entry.rdata
