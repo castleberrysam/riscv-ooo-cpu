@@ -40,11 +40,15 @@ module brpred(
   assign pht_wr_data[0] = (~rob_ret_bptag[14] & (rob_ret_bptag[15] | rob_ret_bptaken)) | 
     (&{rob_ret_bptaken, rob_ret_bptag[15:14]});
  
-  // ==
-  // for simulation: sram reset initial
-  sram #(2, 14) pht_ram (.clk(clk), .rst(rst), .ren(fetch_bp_req), .raddr(pht_rd_addr),
-    .rdata(pht_rd_data), .wen(rob_ret_branch), .waddr(rob_ret_bptag[13:0]), .wdata(pht_wr_data));
-  // ==
+  sram_1r1w #(14,2,1) pht_ram (
+    .rd_clk(clk),
+    .rd_en(fetch_bp_req),
+    .rd_addr(pht_rd_addr),
+    .rd_data(pht_rd_data),
+    .wr_clk(clk),
+    .wr_en(rob_ret_branch),
+    .wr_addr(rob_ret_bptag[13:0]),
+    .wr_data(pht_wr_data));
 
   // req_r
   flop req_r_flop (.clk(clk), .rst(rst|~fetch_bp_req), .set(~rst&fetch_bp_req), .enable(1'b0), .d(1'b0), .q(req_r));

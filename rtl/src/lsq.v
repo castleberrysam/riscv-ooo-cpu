@@ -670,7 +670,7 @@ module lsq(
   /*verilator lint_off WIDTH*/
   always @(posedge clk)
     if(rename_lsq_write & ~lsq_stall)
-      top.tb_trace_lsq_dispatch(
+      tb_top.tb_trace_lsq_dispatch(
         rename_robid,
         rename_op[3] ? ($clog2(sq_tail) | (1 << 4)) : $clog2(lq_insert_sel),
         rename_op,
@@ -682,7 +682,7 @@ module lsq(
     if(lq_base_fwd_en != 0)
       for(j = 0; j < 16; j=j+1)
         if(lq_base_fwd_en[j])
-          top.tb_trace_lsq_base(
+          tb_top.tb_trace_lsq_base(
             j,
             wb_result);
 
@@ -691,7 +691,7 @@ module lsq(
     if(sq_base_fwd_en != 0)
       for(k = 0; k < 16; k=k+1)
         if(sq_base_fwd_en[k])
-          top.tb_trace_lsq_base(
+          tb_top.tb_trace_lsq_base(
             16 + k,
             wb_result);
 
@@ -700,13 +700,13 @@ module lsq(
     if(sq_data_fwd_en != 0)
       for(l = 0; l < 16; l=l+1)
         if(sq_data_fwd_en[l])
-          top.tb_trace_lsq_wdata(
+          tb_top.tb_trace_lsq_wdata(
             16 + l,
             wb_result);
 
   always @(posedge clk)
     if(~rst)
-      top.tb_log_lsq_inflight(
+      tb_top.tb_log_lsq_inflight(
         lq_valid,
         sq_valid);
   /*verilator lint_on WIDTH*/

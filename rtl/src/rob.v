@@ -226,9 +226,10 @@ module rob (
 `ifndef SYNTHESIS
   always @(posedge clk) begin
     if (ret_valid)
-      top.tb_trace_rob_retire(buf_head, ret_retop, ret_addr, ret_error, ret_mispred, ret_ecause,
-                              ret_rd, rob_ret_result);
-    if (rob_flush) top.tb_log_rob_flush();
+      tb_top.tb_trace_rob_retire(buf_head, ret_retop, ret_addr, ret_error, ret_mispred, ret_ecause,
+                                 ret_rd, rob_ret_result);
+    if (rob_flush)
+      tb_top.tb_log_rob_flush();
   end
 `endif
 

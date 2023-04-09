@@ -1,50 +1,82 @@
 // age matrix
 module agemat #(
-  parameter SIZE = 16
+  parameter WIDTH = 16,
+  parameter OLDEST = 1
   )(
-  input             clk,
-  input             rst,
+  input              clk,
+  input              rst,
 
-  input             insert_valid,
-  input [SIZE-1:0]  insert_sel,
+  input              insert_valid,
+  input [WIDTH-1:0]  insert_sel,
 
-  input [SIZE-1:0]  req,
-  output            grant_valid,
-  output [SIZE-1:0] grant);
+  input [WIDTH-1:0]  req,
+  output             grant_valid,
+  output [WIDTH-1:0] grant);
 
-  // column-major for faster simulation
-  wire [SIZE-1:0] matrix [0:SIZE-1];
+  // Each bit in the matrix represents the relative age of the two entries
+  // corresponding to the row and column index. On an allocation, we set the
+  // corresponding row to 1 and the corresponding column to 0. E.g. assuming an
+  // empty queue with WIDTH=5 and an allocation at index 1, this will be the
+  // resulting state:
+  //
+  // 0 . . 0 .
+  // . 0 . 0 .
+  // . . 0 0 .
+  // 1 1 1 0 1
+  // . . . 0 0
+  //
+  // Then an allocation at index 3 will result in this state:
+  //
+  // 0 0 . 0 .
+  // 1 0 1 1 1
+  // . 0 0 0 .
+  // 1 0 1 0 1
+  // . 0 . 0 0
+  //
+  // When both entries request issue, we use this equation to find the oldest:
+  //
+  // grant[i] = req[i] & ~(req[j] & matrix[i][j]) for all j
+  //
+  // grant[1]=1  grant[3]=1
+  // . . . . .   . . . . .
+  // . . . . .   . 0 . 0 .
+  // . . . . .   . . . . .
+  // . 0 . 0 .   . . . . .
+  // . . . . .   . . . . .
+  //
+  // As you can see this is only true for the oldest of all the requests.
 
-  wire [SIZE-1:0] insert_en = {SIZE{insert_valid}} & insert_sel;
+  // row-major ([i][j] means row i column j)
+  wire [WIDTH-1:0] matrix [0:WIDTH-1];
 
-  genvar col, row;
+  // write side
+  genvar row, col;
   generate
-    for(row = 0; row < SIZE; row=row+1)
-      for(col = 0; col < SIZE; col=col+1)
-        if(row != col)
-          flop matrix_r(
-            .clk(clk),
-            .rst(insert_en[col] | rst),
-            .set(insert_en[row]),
-            .enable(1'b0),
-            .d(1'b0),
-            .q(matrix[col][row]));
-        else
-          assign matrix[col][row] = 0;
+    assign matrix[0][0] = 1'b0;
+    for(row = 1; row < WIDTH; row=row+1) begin
+      wire [row-1:0] matrix_r, matrix_nxt;
+      dff #(row) u_matrix_r (matrix_r, matrix_nxt, clk, insert_valid);
+      for(col = 0; col < row; col=col+1) begin
+        assign matrix_nxt[col] = ( matrix_r[col] |
+                                   insert_sel[row] ) &
+                                 ~insert_sel[col];
+        assign matrix[row][col] = matrix_r[col];
+        assign matrix[col][row] = ~matrix_r[col];
+      end
+      assign matrix[row][row] = 1'b0;
+    end
   endgenerate
 
-  /*verilator lint_off UNOPTFLAT*/
-  wire [SIZE-1:0] steps [0:SIZE];
-  assign steps[0] = req;
+  // read side
+  assign grant_valid = |req;
 
-  genvar i;
+  genvar i, j;
   generate
-    for(i = 0; i < SIZE; i=i+1)
-      assign steps[i+1] = steps[i] & ({SIZE{~req[i]}} | ~matrix[i]);
+    for(i = 0; i < WIDTH; i=i+1)
+      if(OLDEST)
+        assign grant[i] = req[i] & (~|(req & matrix[i]));
+      else
+        assign grant[i] = req[i] & (~|(req & ~matrix[i]));
   endgenerate
-  /*verilator lint_on UNOPTFLAT*/
-
-  assign grant = steps[SIZE];
-  assign grant_valid = |grant;
 
 endmodule
