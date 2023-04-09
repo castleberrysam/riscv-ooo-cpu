@@ -89,8 +89,9 @@ module mul(
 
 
   // Accumulator: Assign on both INIT and PROG
+  // REVISIT: implement CLA
   wire [35:0] acc_sum;
-  `ADD(36, acc_sum, acc_se[65:30], ptl_prod);
+  assign acc_sum = acc_se[65:30] + ptl_prod;
 
   flop #(66) acc_flop (.clk(clk), .rst(1'b0), .set(1'b0), .enable(~PROG_FINAL_STATE),
       .d(acc_c), .q(acc));
