@@ -2,9 +2,7 @@
 module fifo #(
   parameter WIDTH = 8,
   parameter DEPTH = 8,
-
-  // local parameters
-  parameter LDEPTH = $clog2(DEPTH)
+  parameter FWD_READ = 0
   )(
   input              clk,
   input              rst,
@@ -16,6 +14,8 @@ module fifo #(
   output             rd_valid,
   input              rd_ready,
   output [WIDTH-1:0] rd_data);
+
+  localparam LDEPTH = $clog2(DEPTH);
 
   // head, tail: counters used for checking full/empty conditions
   // head_oh, tail_oh: one-hot shift registers used for select signals
@@ -31,7 +31,7 @@ module fifo #(
   assign empty = (head == tail) & (head_pol == tail_pol);
 
   wire wr_beat, rd_beat;
-  assign wr_ready = ~full | rd_beat;
+  assign wr_ready = ~full | FWD_READ & rd_beat;
   assign rd_valid = ~empty;
 
   assign wr_beat = wr_valid & wr_ready;
