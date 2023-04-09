@@ -73,10 +73,11 @@ module lsq #(
   wire [15:0]        lq_insert_sel;
   wire [15:0]        lq_insert_en;
 
-  wire               lq_issue_rdy;
+  wire               lq_issue_rdy, lq_issue_rdy_r;
+  wire [15:0]        lq_issuse_sel, lq_issue_sel_r;
+
   wire               lq_issue_req;
   wire               lq_issue_beat;
-  wire [15:0]        lq_issue_sel;
   wire [15:0]        lq_issue_en;
 
   wire               lq_remove_rdy;
@@ -129,16 +130,16 @@ module lsq #(
 
   // dcache interface
   wire [2:0] lq_type_out, sq_type_out;
-  premux #(3,16) lq_type_out_mux(lq_issue_sel, lq_type, lq_type_out);
+  premux #(3,16) lq_type_out_mux(lq_issue_sel_r, lq_type, lq_type_out);
   premux #(3,16) sq_type_out_mux(sq_head, sq_type, sq_type_out);
 
   wire [31:0] lq_addr_out, sq_addr_out;
-  premux #(32,16) lq_addr_out_mux(lq_issue_sel, lq_addr, lq_addr_out);
+  premux #(32,16) lq_addr_out_mux(lq_issue_sel_r, lq_addr, lq_addr_out);
   premux #(32,16) sq_addr_out_mux(sq_head, sq_addr, sq_addr_out);
 
   wire [7:0] lq_op2_out;
   wire [31:0] sq_data_out;
-  premux #(8,16) lq_data_out_mux(lq_issue_sel, lq_op2, lq_op2_out);
+  premux #(8,16) lq_data_out_mux(lq_issue_sel_r, lq_op2, lq_op2_out);
   premux #(32,16) sq_data_out_mux(sq_head, sq_data, sq_data_out);
 
   assign lsq_dc_req = lq_issue_req | |sq_issue_req;
@@ -146,7 +147,7 @@ module lsq #(
   assign lsq_dc_op[0] = ~lq_issue_req;
   mux #(32,2) dc_addr_mux(lq_issue_req, {lq_addr_out,sq_addr_out}, lsq_dc_addr);
   encoder #(16) dc_lsqid_encoder(
-    .in(lq_issue_sel),
+    .in(lq_issue_sel_r),
     .invalid(),
     .out(lsq_dc_lsqid));
   mux #(32,2) dc_wdata_mux(lq_issue_req, {24'b0,lq_op2_out,sq_data_out}, lsq_dc_wdata);
@@ -165,9 +166,9 @@ module lsq #(
   assign lq_insert_beat = rename_lsq_write & ~rename_op[3] & lq_insert_rdy;
   assign lq_insert_en = {16{lq_insert_beat}} & lq_insert_sel;
 
-  assign lq_issue_req = lq_issue_rdy & ~lq_sq_hit & ~rob_flush;
+  assign lq_issue_req = lq_issue_rdy_r & ~lq_sq_hit & ~rob_flush;
   assign lq_issue_beat = lq_issue_req & dcache_lsq_ready;
-  assign lq_issue_en = {16{lq_issue_beat}} & lq_issue_sel;
+  assign lq_issue_en = {16{lq_issue_beat}} & lq_issue_sel_r;
 
   assign lq_remove_en = {16{wb_beat}} & lq_remove_sel;
 
@@ -356,6 +357,7 @@ module lsq #(
     .enable(1'b0),
     .d(1'b0),
     .q(lq_issued));
+  assign lq_issued_fwd = lq_issued | lq_issue_en;
 
   // lq_complete, lq_error, lq_ecause, lq_data
   wire [15:0] dcache_lq_sel;
@@ -403,9 +405,12 @@ module lsq #(
     .rst(rst),
     .insert_valid(lq_insert_beat),
     .insert_sel(lq_insert_sel),
-    .req(lq_valid & lq_addr_rdy & ~lq_issued),
+    .req(lq_valid & lq_addr_rdy & ~lq_issued_fwd),
     .grant_valid(lq_issue_rdy),
     .grant(lq_issue_sel));
+
+  dffr       u_lq_issue_rdy_r (lq_issue_rdy_r, lq_issue_rdy, clk, 1'b1, rst);
+  dff  #(16) u_lq_issue_sel_r (lq_issue_sel_r, lq_issue_sel, clk, lq_issue_rdy);
 
   agearr #(16,16) lq_sq_agearr(
     .clk(clk),
@@ -414,14 +419,14 @@ module lsq #(
     .set_row_sel(lq_insert_sel),
     .clear_col_valid(sq_insert_beat),
     .clear_col_sel(sq_tail),
-    .row_sel(lq_issue_sel),
+    .row_sel(lq_issue_sel_r),
     .col_sel(lq_sq_sel));
 
   // generate lq_sq_addr, lq_sq_wide
   wire [31:0] lq_sq_addr;
   wire [2:0]  lq_sq_type;
-  premux #(32,16) lq_sq_addr_mux(lq_issue_sel, lq_addr, lq_sq_addr);
-  premux #(3,16) lq_sq_type_mux(lq_issue_sel, lq_type, lq_sq_type);
+  premux #(32,16) lq_sq_addr_mux(lq_issue_sel_r, lq_addr, lq_sq_addr);
+  premux #(3,16) lq_sq_type_mux(lq_issue_sel_r, lq_type, lq_sq_type);
 
   wire [15:0] lq_sq_addr_hit_hi, lq_sq_addr_hit_lo;
   generate
