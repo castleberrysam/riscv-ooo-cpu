@@ -21,11 +21,13 @@ module alu_simple(
   wire [31:0] sll_res;
   shf #(32, 0) lshf(.sgn(1'b0), .a(op1), .b(op2[4:0]), .c(sll_res)); // SLL
   
-  wire [31:0] slt_res;
-  cmp_ls #(32) slt (.sgn(1'b1), .a(op1), .b(op2), .out(slt_res));
-  
-  wire [31:0] sltu_res;
-  cmp_ls #(32) sltu(.sgn(1'b0), .a(op1), .b(op2), .out(sltu_res));
+  wire sltu_res, slt_res;
+  cmp #(32,4,0) u_sltu_res (
+    .a(op1),
+    .b(op2),
+    .eq(),
+    .lt(sltu_res));
+  assign slt_res = sltu_res ^ op1[31] ^ op2[31];
   
   wire [31:0] xorseq_res;
   mux #(32, 2) xor_mux (.sel(op[3]), .in({{31'b0,op1 == op2}, op1^op2}), .out(xorseq_res)); // XOR, SEQ
@@ -38,7 +40,7 @@ module alu_simple(
 
   wire [31:0] basic_res;
   mux #(32, 8) basic_alu_mux (.sel(op[2:0]), 
-    .in({and_res, or_res, srl_res, xorseq_res, sltu_res, slt_res, sll_res, add_res}),
+    .in({and_res, or_res, srl_res, xorseq_res, {31'b0,sltu_res}, {31'b0,slt_res}, sll_res, add_res}),
     .out(basic_res));
 
   wire [31:0] pfind_res = {p_vec_zero, 26'b0, p_index};
