@@ -1,6 +1,11 @@
 `include "buscmd.vh"
 
 module cpu #(
+  parameter BTB_NUM_SETS = 256,
+  parameter BTB_NUM_WAYS = 2,
+  parameter PHT_IDX_MSB = 13,
+  parameter BPATTR_WIDTH = 3,
+  parameter FQ_SIZE = 8,
   parameter ROBID_MSB = 4,
   parameter RS_ENTRIES = 32
   )(
@@ -11,9 +16,6 @@ module cpu #(
 );
 
   /*AUTOWIRE*/
-
-  brpred brpred(
-    /*AUTOINST*/);
 
   csr #(
     /*AUTOINSTPARAM*/
@@ -33,7 +35,9 @@ module cpu #(
     ) exers (
     /*AUTOINST*/);
 
-  fetch fetch(
+  fetch #(
+    /*AUTOINSTPARAM*/
+    ) fetch (
     /*AUTOINST*/);
 
   icache icache(

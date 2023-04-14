@@ -1,255 +1,164 @@
 // instruction fetch unit
-module fetch(
-  input         clk,
-  input         rst,
+module fetch #(
+  parameter BTB_NUM_SETS = 256,
+  parameter BTB_NUM_WAYS = 2,
+  parameter PHT_IDX_MSB = 13,
+  parameter BPATTR_WIDTH = 3,
+  parameter FQ_SIZE = 8
+  )(
+  input                     clk,
+  input                     rst,
 
   // icache interface
-  output        fetch_ic_req,
-  output [31:2] fetch_ic_addr,
-  output        fetch_ic_flush,
-  input         icache_ready,
-  input         icache_valid,
-  input         icache_error,
-  input [31:0]  icache_data,
-
-  // brpred interface
-  output        fetch_bp_req,
-  output [31:2] fetch_bp_addr,
-  input [15:0]  brpred_bptag,
-  input         brpred_bptaken,
+  output                    fetch_ic_req,
+  output [31:2]             fetch_ic_addr,
+  output                    fetch_ic_flush,
+  input                     icache_ready,
+  input                     icache_valid,
+  input                     icache_error,
+  input [31:0]              icache_data,
 
   // decode interface
-  output        fetch_de_valid,
-  output        fetch_de_error,
-  output [31:1] fetch_de_addr,
-  output [31:0] fetch_de_insn,
-  output [15:0] fetch_de_bptag,
-  output        fetch_de_bptaken,
-  input         decode_stall,
+  output                    fetch_de_valid,
+  output                    fetch_de_error,
+  output [31:2]             fetch_de_addr,
+  output [31:0]             fetch_de_insn,
+  output                    fetch_de_bptaken,
+  output [BPATTR_WIDTH-1:0] fetch_de_bpattr,
+  output [31:2]             fetch_de_target,
+  input                     decode_stall,
 
   // rob interface
-  input         rob_flush,
-  input [31:2]  rob_flush_pc);
+  input                     rob_flush,
+  input                     rob_ret_branch,
+  input                     rob_ret_bptaken,
+  input                     rob_ret_uncond,
+  input [BPATTR_WIDTH-1:0]  rob_ret_bpattr,
+  input [31:2]              rob_ret_addr,
+  input [31:2]              rob_ret_target);
 
-  wire [31:1] pc;
+  localparam FQ_PTR_WIDTH = $clog2(FQ_SIZE);
 
-  wire [15:0] buf_valid;
-  wire [15:0] buf_error;
-  wire [(31*16)-1:0] buf_addr;
-  wire [(32*16)-1:0] buf_insn;
-  wire [15:0] buf_bptaken;
-  wire [(16*16)-1:0] buf_bptag;
+  /*AUTOWIRE*/
+  // Beginning of automatic wires (for undeclared instantiated-module outputs)
+  wire [31:2]           brpred_fetch_addr;
+  wire [BPATTR_WIDTH-1:0] brpred_fetch_bpattr;
+  wire                  brpred_fetch_bptaken;
+  wire [31:2]           brpred_fetch_target;
+  wire                  brpred_fetch_valid;
+  // End of automatics
 
-  // buf_tail advanced upon issuing icache requests
-  // buf_mid advanced upon receiving icache responses
-  // buf_head advanced upon sending insns to decode
-  // *_pol used to distinguish between empty and full conditions
-  wire [15:0] buf_head_oh, buf_mid_oh, buf_tail_oh;
-  wire        buf_head_pol, buf_tail_pol, buf_mid_pol;
+  wire fq_empty;
+  wire fq_full;
 
-  wire        bp_req_r;
-  wire        insn_jal_r;
-  wire        jalr_halt_r;
-  wire        misalign_err_r;
+  wire                  fq_tail_en;
+  wire [FQ_PTR_WIDTH:0] fq_tail_nxt;
+  wire [FQ_PTR_WIDTH:0] fq_tail_r;
 
-  /*verilator lint_off WIDTH*/
-  // br/jal target computation
-  function [31:1] br_target(
-    input [31:2] base,
-    input [31:0] insn);
-    br_target = $signed({base,1'b0}) + $signed({insn[31],insn[7],insn[30:25],insn[11:8]});
-  endfunction
+  wire [FQ_SIZE-1:0]    fq_tail_dec;
+  wire [FQ_SIZE-1:0]    fq_tail_wen;
 
-  function [31:1] jal_target(
-    input [31:2] base,
-    input [31:0] insn);
-    jal_target = $signed({base,1'b0}) + $signed({insn[31],insn[19:12],insn[20],insn[30:21]});
-  endfunction
-  /*verilator lint_on WIDTH*/
+  wire                  fq_mid_en;
+  wire [FQ_PTR_WIDTH:0] fq_mid_nxt;
+  wire [FQ_PTR_WIDTH:0] fq_mid_r;
 
-  // derived signals
-  wire buf_empty, buf_full;
-  assign buf_empty = (buf_head_oh == buf_tail_oh) & (buf_head_pol == buf_tail_pol);
-  assign buf_full  = (buf_head_oh == buf_tail_oh) & (buf_head_pol != buf_tail_pol);
+  wire [FQ_SIZE-1:0]    fq_mid_dec;
+  wire [FQ_SIZE-1:0]    fq_mid_wen;
 
-  //wire [3:0] buf_mid_prev;
-  wire [15:0] buf_mid_prev_oh = {buf_mid_oh[0], buf_mid_oh[15:1]};
-  // debugging
-  //encoder #(16) mid_prev_enc (.in(buf_mid_prev_oh), .invalid(), .out(buf_mid_prev));  
+  wire                  fq_head_en;
+  wire [FQ_PTR_WIDTH:0] fq_head_nxt;
+  wire [FQ_PTR_WIDTH:0] fq_head_r;
 
-  wire icache_beat = fetch_ic_req & icache_ready;
-  wire decode_beat = fetch_de_valid & ~decode_stall;
+  wire [FQ_SIZE*32-1:0]           fq_insn_r;
+  wire [FQ_SIZE*30-1:0]           fq_addr_r;
+  wire [FQ_SIZE*30-1:0]           fq_target_r;
+  wire [FQ_SIZE-1:0]              fq_bptaken_r;
+  wire [FQ_SIZE*BPATTR_WIDTH-1:0] fq_bpattr_r;
+  wire [FQ_SIZE-1:0]              fq_error_r;
 
-  wire insn_br, insn_jal, insn_jalr;
-  assign insn_br   = icache_valid & ~icache_error & (icache_data[6:0] == 7'b1100011);
-  assign insn_jal  = icache_valid & ~icache_error & (icache_data[6:0] == 7'b1101111);
-  assign insn_jalr = icache_valid & ~icache_error & (icache_data[6:0] == 7'b1100111);
+  // compare head and mid for empty, head and tail for full
+  assign fq_empty = (fq_head_r[FQ_PTR_WIDTH-1:0] == fq_mid_r[FQ_PTR_WIDTH-1:0]) &
+                    (fq_head_r[FQ_PTR_WIDTH] == fq_mid_r[FQ_PTR_WIDTH]);
+  assign fq_full  = (fq_head_r[FQ_PTR_WIDTH-1:0] == fq_tail_r[FQ_PTR_WIDTH-1:0]) &
+                    (fq_head_r[FQ_PTR_WIDTH] != fq_tail_r[FQ_PTR_WIDTH]);
 
-  wire br_taken = bp_req_r & brpred_bptaken;
+  assign fq_tail_en = rob_flush | fetch_ic_req & icache_ready;
+  assign fq_tail_nxt = rob_flush ? {FQ_PTR_WIDTH+1{1'b0}} : (fq_tail_r + 1);
+  dffr #(FQ_PTR_WIDTH+1) u_fq_tail_r (fq_tail_r, fq_tail_nxt, clk, fq_tail_en, rst);
 
-  wire setpc = rob_flush | br_taken | insn_jal_r;
+  decoder #(FQ_PTR_WIDTH) u_fq_tail_dec (fq_tail_r[FQ_PTR_WIDTH-1:0], fq_tail_dec);
+  assign fq_tail_wen = fq_tail_dec & {FQ_SIZE{fq_tail_en}};
 
-  wire pc_misaligned = pc[1];
+  genvar i;
+  generate
+    for(i = 0; i < FQ_SIZE; i=i+1) begin
+      dff #(30)           u_fq_addr_r    (fq_addr_r[i*30+:30],   brpred_fetch_addr,    clk, fq_tail_wen[i]);
+      dff #(30)           u_fq_target_r  (fq_target_r[i*30+:30], brpred_fetch_target,  clk, fq_tail_wen[i]);
+      dff                 u_fq_bptaken_r (fq_bptaken_r[i],       brpred_fetch_bptaken, clk, fq_tail_wen[i]);
+      dff #(BPATTR_WIDTH) u_fq_bpattr_r  (fq_bpattr_r[i*BPATTR_WIDTH+:BPATTR_WIDTH], brpred_fetch_bpattr, clk, fq_tail_wen[i]);
+    end
+  endgenerate
 
-  wire gen_misalign_err = pc_misaligned & ~misalign_err_r & ~buf_full & ~setpc;
+  assign fq_mid_en = rob_flush | icache_valid;
+  assign fq_mid_nxt = rob_flush ? {FQ_PTR_WIDTH+1{1'b0}} : (fq_mid_r + 1);
+  dffr #(FQ_PTR_WIDTH+1) u_fq_mid_r  (fq_mid_r,  fq_mid_nxt,  clk, fq_mid_en,  rst);
 
-  // fetch interface
-  assign fetch_ic_req = ~buf_full & ~fetch_ic_flush & ~jalr_halt_r & ~pc_misaligned;
-  assign fetch_ic_addr = pc[31:2];
-  assign fetch_ic_flush = setpc | insn_jalr;
+  assign fetch_ic_req = brpred_fetch_valid & ~fq_full;
+  assign fetch_ic_addr = brpred_fetch_addr;
+  assign fetch_ic_flush = rob_flush;
+  assign fetch_brpred_ready = icache_ready & ~fq_full;
 
-  // buf read ports
-  //
-  // buf valid
-  wire buf_valid_head;
-  premux #(1, 16) buf_valid_head_mux (.sel(buf_head_oh), .in(buf_valid), .out(buf_valid_head));
-  // buf error
-  wire buf_error_head;
-  premux #(1, 16) buf_error_head_mux (.sel(buf_head_oh), .in(buf_error), .out(buf_error_head));
-  // buf addr
-  wire [31:1] buf_addr_mid, buf_addr_head, buf_addr_mid_prev;
-  premux #(31, 16) buf_addr_mid_mux (.sel(buf_mid_oh), .in(buf_addr), .out(buf_addr_mid));
-  premux #(31, 16) buf_addr_head_mux (.sel(buf_head_oh), .in(buf_addr), .out(buf_addr_head));
-  premux #(31, 16) buf_addr_mid_prev_mux (.sel(buf_mid_prev_oh), .in(buf_addr), .out(buf_addr_mid_prev));
-  
-  // buf insn
-  wire [31:0] buf_insn_head, buf_insn_mid_prev;
-  premux #(32, 16) buf_insn_head_mux (.sel(buf_head_oh), .in(buf_insn), .out(buf_insn_head));
-  premux #(32, 16) buf_insn_mid_prev_mux (.sel(buf_mid_prev_oh), .in(buf_insn), .out(buf_insn_mid_prev));
-  
-  // buf bptaken
-  wire buf_bptaken_head;
-  premux #(1, 16) buf_bptaken_head_mux (.sel(buf_head_oh), .in(buf_bptaken), .out(buf_bptaken_head));
-  
-  // buf bptag
-  wire [15:0] buf_bptag_head;
-  premux #(16, 16) buf_bptag_head_mux (.sel(buf_head_oh), .in(buf_bptag), .out(buf_bptag_head));
+  decoder #(FQ_PTR_WIDTH) u_fq_mid_dec (fq_mid_r[FQ_PTR_WIDTH-1:0], fq_mid_dec);
+  assign fq_mid_wen = fq_mid_dec & {FQ_SIZE{fq_mid_en}};
 
+  genvar j;
+  generate
+    for(j = 0; j < FQ_SIZE; j=j+1) begin
+      dff #(32) u_fq_insn_r  (fq_insn_r[j*32+:32], icache_data,  clk, fq_mid_wen[j]);
+      dff       u_fq_error_r (fq_error_r[j],       icache_error, clk, fq_mid_wen[j]);
+    end
+  endgenerate
 
-  // brpred interface
-  assign fetch_bp_req = insn_br;
-  assign fetch_bp_addr = buf_addr_mid[31:2];
+  assign fq_head_en = rob_flush | fetch_de_valid & ~decode_stall;
+  assign fq_head_nxt = rob_flush ? {FQ_PTR_WIDTH+1{1'b0}} : (fq_head_r + 1);
+  dffr #(FQ_PTR_WIDTH+1) u_fq_head_r (fq_head_r, fq_head_nxt, clk, fq_head_en, rst);
 
-  // decode interface
-  assign fetch_de_valid = ~buf_empty & buf_valid_head;
-  assign fetch_de_error = buf_error_head;
-  assign fetch_de_addr = buf_addr_head;
-  assign fetch_de_insn = buf_insn_head;
-  assign fetch_de_bptag = buf_bptag_head;
-  assign fetch_de_bptaken = buf_bptaken_head;
+  assign fetch_de_valid = ~fq_empty;
+  mux #(1, FQ_SIZE)           u_fetch_de_error   (fq_head_r[FQ_PTR_WIDTH-1:0], fq_error_r,   fetch_de_error);
+  mux #(30,FQ_SIZE)           u_fetch_de_addr    (fq_head_r[FQ_PTR_WIDTH-1:0], fq_addr_r,    fetch_de_addr);
+  mux #(32,FQ_SIZE)           u_fetch_de_insn    (fq_head_r[FQ_PTR_WIDTH-1:0], fq_insn_r,    fetch_de_insn);
+  mux #(1, FQ_SIZE)           u_fetch_de_bptaken (fq_head_r[FQ_PTR_WIDTH-1:0], fq_bptaken_r, fetch_de_bptaken);
+  mux #(BPATTR_WIDTH,FQ_SIZE) u_fetch_de_bpattr  (fq_head_r[FQ_PTR_WIDTH-1:0], fq_bpattr_r,  fetch_de_bpattr);
+  mux #(30,FQ_SIZE)           u_fetch_de_target  (fq_head_r[FQ_PTR_WIDTH-1:0], fq_target_r,  fetch_de_target);
 
-  // pc
-  wire [31:1] pc_set = {31{rst}} & 31'h08000000;
-  wire [31:1] pc_rst = {31{rst}} & ~31'h08000000;
+  brpred #(
+    /*AUTOINSTPARAM*/
+           // Parameters
+           .BPATTR_WIDTH        (BPATTR_WIDTH),
+           .BTB_NUM_SETS        (BTB_NUM_SETS),
+           .BTB_NUM_WAYS        (BTB_NUM_WAYS),
+           .PHT_IDX_MSB         (PHT_IDX_MSB)) u_brpred (
+    /*AUTOINST*/
+    // Outputs
+    .brpred_fetch_addr(brpred_fetch_addr[31:2]),
+    .brpred_fetch_bpattr(brpred_fetch_bpattr[BPATTR_WIDTH-1:0]),
+    .brpred_fetch_bptaken(brpred_fetch_bptaken),
+    .brpred_fetch_target(brpred_fetch_target[31:2]),
+    .brpred_fetch_valid(brpred_fetch_valid),
+    // Inputs
+    .clk(clk),
+    .fetch_brpred_ready(fetch_brpred_ready),
+    .rob_flush(rob_flush),
+    .rob_ret_addr(rob_ret_addr),
+    .rob_ret_bpattr(rob_ret_bpattr),
+    .rob_ret_bptaken(rob_ret_bptaken),
+    .rob_ret_branch(rob_ret_branch),
+    .rob_ret_target(rob_ret_target),
+    .rob_ret_uncond(rob_ret_uncond),
+    .rst(rst));
 
-  wire [31:1] pc_flush = {rob_flush_pc, 1'b0};
+`ifndef SYNTHESIS
+`include "fetch_val.v"
+`endif
 
-  wire [31:0] insn_mp = buf_insn_mid_prev;
-  wire [31:1] pc_br;
-  `ADD(31, pc_br, {buf_addr_mid_prev[31:2], 1'b0}, 
-    {{20{insn_mp[31]}},insn_mp[7],insn_mp[30:25],insn_mp[11:8]});
-  
-  wire [31:1] pc_jal;
-  `ADD(31, pc_jal, {buf_addr_mid_prev[31:2], 1'b0},
-    {{12{insn_mp[31]}},insn_mp[19:12],insn_mp[20],insn_mp[30:21]});
-
-  wire [31:1] pc_inc; //= pc + 2;
-  `ADD(31, pc_inc, pc, 31'h02);
-  
-  wire [3:0] pc_sel;
-  wire pc_dis;
-  privector #(4, 1) pc_sel_prippf (.in({icache_beat, insn_jal_r, br_taken, rob_flush}),
-    .invalid(pc_dis), .out(pc_sel));
-  
-  wire [31:1] pc_next;
-  premux #(31, 4) pc_next_mux (.sel(pc_sel), .in({pc_inc, pc_jal, pc_br, pc_flush}),
-    .out(pc_next));
-
-  flop pc_flop [31:1] (.clk(clk), .rst(pc_rst), .set(pc_set), .enable(~pc_dis),
-      .d(pc_next), .q(pc));
-
-
-  // buf_tail
-  wire buf_tail_pol_next;
-  onehot_load #(16) buf_tail_ohmod (.clk(clk), .rst(rst|rob_flush), .load(setpc),
-    .load_val(buf_mid_oh), .shift(icache_beat), .out(buf_tail_oh));
-  
-  mux #(1, 2) buf_tail_pol_next_mux (.sel(setpc), 
-      .in({buf_mid_pol, buf_tail_pol ^ buf_tail_oh[15]}),
-      .out(buf_tail_pol_next));
-
-  flop buf_tail_pol_flop (.clk(clk), .rst(rst|rob_flush), .set(1'b0), 
-      .enable(setpc | icache_beat), .d(buf_tail_pol_next), .q(buf_tail_pol));
-
-
-  // buf_mid
-  onehot #(16) buf_mid_ohmod (.clk(clk), .rst(rst|rob_flush),
-      .shift(icache_valid & ~setpc), .out(buf_mid_oh));
-
-  flop buf_mid_pol_flop (.clk(clk), .rst(rst|rob_flush), .set(1'b0),
-      .enable(icache_valid & ~setpc), .d(buf_mid_pol ^ buf_mid_oh[15]), .q(buf_mid_pol));
-
-
-  // buf_head
-  onehot #(16) buf_head_ohmod (.clk(clk), .rst(rst|rob_flush),
-      .shift(decode_beat), .out(buf_head_oh));
-
-  flop buf_head_pol_flop (.clk(clk), .rst(rst|rob_flush), .set(1'b0),
-      .enable(decode_beat), .d(buf_head_pol ^ buf_head_oh[15]), .q(buf_head_pol));
-
-  
-  // buf write ports
-  // buf valid
-  wire [15:0] buf_valid_rst_vec = {16{rst}} | ({16{icache_beat}} & buf_tail_oh);
-  wire [15:0] buf_valid_set_vec = ({16{icache_valid & ~fetch_bp_req}} & buf_mid_oh) |
-    ({16{bp_req_r}} & buf_mid_prev_oh) | ({16{gen_misalign_err}} & buf_tail_oh);
-  
-  flop buf_valid_flop [15:0] (.clk(clk), .rst(buf_valid_rst_vec), .set(buf_valid_set_vec),
-    .enable(1'b0), .d(1'b0), .q(buf_valid));
-
-  // buf error
-  wire [15:0] buf_error_set = ({16{gen_misalign_err}} & buf_tail_oh) |
-    ({16{icache_valid & icache_error}} & buf_mid_oh);
-  wire [15:0] buf_error_rst = {16{icache_valid & ~icache_error}} & buf_mid_oh;
- 
-  flop buf_error_flop [15:0] (.clk(clk), .rst(buf_error_rst), .set(buf_error_set),
-    .enable(1'b0), .d(1'b0), .q(buf_error));
-  
-  // buf addr
-  wire [15:0] buf_addr_en = {16{gen_misalign_err|icache_beat}} & buf_tail_oh;
-  flop #(31) buf_addr_flop [15:0] (.clk(clk), .rst(1'b0), .set(1'b0),
-    .enable(buf_addr_en), .d(pc), .q(buf_addr));
-  
-  // buf insn
-  wire [15:0] buf_insn_en = {16{icache_valid}} & buf_mid_oh;
-  flop #(32) buf_insn_flop [15:0] (.clk(clk), .rst(1'b0), .set(1'b0),
-    .enable(buf_insn_en), .d(icache_data), .q(buf_insn));
-
-  // buf bptaken
-  wire [15:0] buf_bp_en = {16{bp_req_r}} & buf_mid_prev_oh;
-  flop buf_bptaken_flop [15:0] (.clk(clk), .rst(1'b0), .set(1'b0),
-    .enable(buf_bp_en), .d(brpred_bptaken), .q(buf_bptaken));
-
-  // buf bptag
-  flop #(16) buf_bptag_flop [15:0] (.clk(clk), .rst(1'b0), .set(1'b0),
-    .enable(buf_bp_en), .d(brpred_bptag), .q(buf_bptag));
-
-
-  wire rst_tmp = rst | setpc;
-  // bp_req_r
-  flop bp_req_r_flop (.clk(clk), .rst(rst_tmp), .set(1'b0),
-    .enable(1'b1), .d(fetch_bp_req), .q(bp_req_r));
-
-  // insn_jal_r
-  flop insn_jal_r_flop (.clk(clk), .rst(rst_tmp), .set(1'b0),
-    .enable(1'b1), .d(insn_jal), .q(insn_jal_r));
-
-  // jalr_halt_r
-  flop jalr_halt_r_flop (.clk(clk), .rst(rst_tmp), .set(~rst_tmp & insn_jalr),
-    .enable(1'b0), .d(1'b0), .q(jalr_halt_r));
-
-  // misalign_err_r
-  flop misalign_err_r_flop (.clk(clk), .rst(rst_tmp), .set(~rst_tmp & gen_misalign_err),
-    .enable(1'b0), .d(1'b0), .q(misalign_err_r));
-  
 endmodule

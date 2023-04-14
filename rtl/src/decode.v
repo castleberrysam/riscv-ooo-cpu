@@ -1,58 +1,63 @@
 // RISC-V instruction decoder
 module decode #(
-  parameter ROBID_MSB = 4
+  parameter ROBID_MSB = 4,
+  parameter BPATTR_WIDTH = 2
   )(
-  input                clk,
-  input                rst,
+  input                     clk,
+  input                     rst,
 
   // fetch interface
-  input                fetch_de_valid,
-  input                fetch_de_error,
-  input [31:1]         fetch_de_addr,
-  input [31:0]         fetch_de_insn,
-  input [15:0]         fetch_de_bptag,
-  input                fetch_de_bptaken,
-  output               decode_stall,
+  input                     fetch_de_valid,
+  input                     fetch_de_error,
+  input [31:2]              fetch_de_addr,
+  input [31:0]              fetch_de_insn,
+  input                     fetch_de_bptaken,
+  input [BPATTR_WIDTH-1:0]  fetch_de_bpattr,
+  input [31:2]              fetch_de_target,
+  output                    decode_stall,
 
   // rob interface
-  output               decode_rob_valid,
-  output               decode_error,
-  output [1:0]         decode_ecause,
-  output [6:0]         decode_retop,
-  output [15:0]        decode_bptag,
-  output               decode_bptaken,
-  input                rob_flush,
-  input                rob_full,
-  input [ROBID_MSB:0]  rob_robid,
+  output                    decode_rob_valid,
+  output                    decode_error,
+  output [1:0]              decode_ecause,
+  output [6:0]              decode_retop,
+  output                    decode_bptaken,
+  output [BPATTR_WIDTH-1:0] decode_bpattr,
+  output [31:2]             decode_bptarget,
+  input                     rob_flush,
+  input                     rob_full,
+  input [ROBID_MSB:0]       rob_robid,
 
   // common rob/rename signals
-  output [5:0]         decode_rd,
-  output [31:2]        decode_addr,
-  output               decode_forward,
-  output [31:2]        decode_target,
+  output [5:0]              decode_rd,
+  output [31:2]             decode_addr,
+  output                    decode_forward,
+  output [31:2]             decode_target,
 
   // rename interface
-  output               decode_rename_valid,
-  output [4:0]         decode_rsop,
-  output [ROBID_MSB:0] decode_robid,
-  output               decode_uses_rs1,
-  output               decode_uses_rs2,
-  output               decode_uses_imm,
-  output               decode_uses_memory,
-  output               decode_uses_pc,
-  output               decode_csr_access,
-  output               decode_inhibit,
-  output [4:0]         decode_rs1,
-  output [4:0]         decode_rs2,
-  output [31:0]        decode_imm,
-  input                rename_stall);
+  output                    decode_rename_valid,
+  output [4:0]              decode_rsop,
+  output [ROBID_MSB:0]      decode_robid,
+  output                    decode_uses_rs1,
+  output                    decode_uses_rs2,
+  output                    decode_uses_imm,
+  output                    decode_uses_memory,
+  output                    decode_uses_pc,
+  output                    decode_csr_access,
+  output                    decode_inhibit,
+  output [4:0]              decode_rs1,
+  output [4:0]              decode_rs2,
+  output [31:0]             decode_imm,
+  input                     rename_stall);
 
   wire        valid;
   wire        error;
-  wire [31:1] addr;
+  wire [31:2] addr;
   wire [31:0] insn;
-  wire [15:0] bptag;
   wire        bptaken;
+
+  wire [BPATTR_WIDTH-1:0] bpattr_r;
+  wire [31:2]             bptarget_r;
 
   wire        fmt_r, fmt_i, fmt_s, fmt_b, fmt_u, fmt_j, fmt_inv;
   wire [31:0] imm;
@@ -133,14 +138,17 @@ module decode #(
   assign uses_rs1 = fmt_r | (fmt_i & (~insn_csr | ~funct3[2])) | fmt_s | fmt_b;
   assign uses_rs2 = fmt_r | fmt_s | fmt_b;
 
-  wire target_ntaken;
-  assign target_ntaken = (fmt_b & bptaken) | insn_jalr;
-
+  // when predicted taken, the target field contains the not-taken target (PC+4)
+  // for JALR, the target field is used to generate the return address
   // TODO misaligned target?
-  wire [31:1] target;
   wire [31:1] target_rhs;
-  mux #(31, 2) target_mux(target_ntaken, {31'd2, imm[31:1]}, target_rhs);
-  rca #(31) target_adder(0, {addr[31:2], 1'b0}, target_rhs, target);
+  wire [31:1] target;
+  assign target_rhs = (bptaken | insn_jalr) ? 31'd2 : imm[31:1];
+  rca #(31) u_target (
+    .sub(1'b0),
+    .a({addr,1'b0}),
+    .b(target_rhs),
+    .c(target));
 
   // fetch interface
   assign decode_stall = rob_full | rename_stall;
@@ -148,10 +156,11 @@ module decode #(
   // rob interface
   assign decode_rob_valid = valid & ~rename_stall;
   assign decode_error = error | fmt_inv;
-  mux #(2, 4) decode_ecause_mux({error, addr[1]}, {ERR_IALIGN, ERR_IFAULT, ERR_IILLEGAL, ERR_IILLEGAL}, decode_ecause);
-  assign decode_retop = {fmt_b,insn_csr,insn_jalr,fmt_s,funct3};
-  assign decode_bptag = bptag;
+  mux #(2, 4) decode_ecause_mux({error, 1'b0/*addr[1]*/}, {ERR_IALIGN, ERR_IFAULT, ERR_IILLEGAL, ERR_IILLEGAL}, decode_ecause);
+  assign decode_retop = {fmt_b, insn_csr, fmt_j | insn_jalr, fmt_s, funct3[2:0]};
   assign decode_bptaken = bptaken;
+  assign decode_bpattr = bpattr_r;
+  assign decode_bptarget = bptarget_r;
 
   // common rob/rename signals
   assign decode_rd = {~uses_rd,rd};
@@ -176,10 +185,12 @@ module decode #(
 
   flop valid_flop       (clk, rst | rob_flush, 0, ~decode_stall, fetch_de_valid, valid);
   flop error_flop       (clk, 0, 0, ~decode_stall, fetch_de_error, error);
-  flop #(31) addr_flop  (clk, 0, 0, ~decode_stall, fetch_de_addr, addr);
+  flop #(30) addr_flop  (clk, 0, 0, ~decode_stall, fetch_de_addr, addr);
   flop #(32) insn_flop  (clk, 0, 0, ~decode_stall, fetch_de_insn, insn);
-  flop #(16) bptag_flop (clk, 0, 0, ~decode_stall, fetch_de_bptag, bptag);
   flop bptaken_flop     (clk, 0, 0, ~decode_stall, fetch_de_bptaken, bptaken);
+
+  dff #(BPATTR_WIDTH) u_bpattr_r   (bpattr_r,   fetch_de_bpattr, clk, ~decode_stall);
+  dff #(30)           u_bptarget_r (bptarget_r, fetch_de_target, clk, ~decode_stall);
 
   // format decoder
   assign fmt_r = (insn[6:2] == OPC_OP) | (insn[6:2] == OPC_CUSTOM0) | (insn[6:2] == OPC_CUSTOM1);

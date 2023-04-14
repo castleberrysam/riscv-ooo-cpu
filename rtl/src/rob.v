@@ -1,63 +1,65 @@
 // reorder buffer and retirement unit
 module rob #(
-  parameter ROBID_MSB = 4
+  parameter ROBID_MSB = 4,
+  parameter BPATTR_WIDTH = 2
   )(
-  input                clk,
-  input                rst,
+  input                     clk,
+  input                     rst,
 
   // decode interface
-  input                decode_rob_valid,
-  input                decode_error,
-  input [1:0]          decode_ecause,
-  input [6:0]          decode_retop,
-  input [31:2]         decode_addr,
-  input [5:0]          decode_rd,
-  input [15:0]         decode_bptag,
-  input                decode_bptaken,
-  input                decode_forward,
-  input [31:2]         decode_target,
-  output               rob_full,
-  output [ROBID_MSB:0] rob_robid,
+  input                     decode_rob_valid,
+  input                     decode_error,
+  input [1:0]               decode_ecause,
+  input [6:0]               decode_retop,
+  input [31:2]              decode_addr,
+  input [5:0]               decode_rd,
+  input                     decode_bptaken,
+  input [BPATTR_WIDTH-1:0]  decode_bpattr,
+  input [31:2]              decode_bptarget,
+  input                     decode_forward,
+  input [31:2]              decode_target,
+  output                    rob_full,
+  output [ROBID_MSB:0]      rob_robid,
 
   // rename interface
-  input                rename_inhibit,
-  input [ROBID_MSB:0]  rename_robid,
-  output               rob_rename_ishead,
+  input                     rename_inhibit,
+  input [ROBID_MSB:0]       rename_robid,
+  output                    rob_rename_ishead,
 
   // wb interface
-  input                wb_valid,
-  input                wb_error,
-  input [4:0]          wb_ecause,
-  input [ROBID_MSB:0]  wb_robid,
-  input [31:0]         wb_result,
+  input                     wb_valid,
+  input                     wb_error,
+  input [4:0]               wb_ecause,
+  input [ROBID_MSB:0]       wb_robid,
+  input [31:0]              wb_result,
 
   // common signals
-  output               rob_flush,
+  output                    rob_flush,
 
   // fetch interface
-  output [31:2]        rob_flush_pc,
+  output                    rob_ret_branch,
+  output                    rob_ret_bptaken,
+  output                    rob_ret_uncond,
+  output [BPATTR_WIDTH-1:0] rob_ret_bpattr,
+  output [31:2]             rob_ret_addr,
+  output [31:2]             rob_ret_target,
 
   // rat interface
-  output               rob_ret_commit,
-  output [4:0]         rob_ret_rd,
-  output [31:0]        rob_ret_result,
-
-  // brpred interface
-  output               rob_ret_branch,
-  output [15:0]        rob_ret_bptag,
-  output               rob_ret_bptaken,
+  output                    rob_ret_commit,
+  output [4:0]              rob_ret_rd,
+  output [31:0]             rob_ret_result,
 
   // lsq interface (out)
-  output               rob_ret_store,
+  output                    rob_ret_store,
 
   // csr interface
-  input [31:2]         csr_tvec,
-  output               rob_ret_valid,
-  output               rob_ret_csr,
-  output               rob_csr_valid,
-  output [31:2]        rob_csr_epc,
-  output [4:0]         rob_csr_ecause,
-  output [31:0]        rob_csr_tval);
+  input [31:2]              csr_tvec,
+  output                    rob_ret_valid,
+  output                    rob_ret_csr,
+  output                    rob_csr_valid,
+  output [31:2]             rob_csr_epc,
+  output [4:0]              rob_csr_ecause,
+  output [31:0]             rob_csr_tval);
 
   localparam ROB_SIZE = 1 << (ROBID_MSB+1);
 
@@ -69,9 +71,11 @@ module rob #(
   wire [ROB_SIZE*5-1:0]  buf_ecause;
   wire [ROB_SIZE*32-1:0] buf_result;
   wire [ROB_SIZE*30-1:0] buf_target;
-  wire [ROB_SIZE*16-1:0] buf_bptag;
   wire [ROB_SIZE-1:0]    buf_bptaken;
   wire [ROB_SIZE-1:0]    buf_forwarded;
+
+  wire [ROB_SIZE*BPATTR_WIDTH-1:0] bpattr_r;
+  wire [ROB_SIZE*30-1:0]           bptarget_r;
 
   // insert at tail, remove at head
   wire [ROBID_MSB:0]   buf_head, buf_tail;
@@ -86,9 +90,11 @@ module rob #(
   wire  [ 4:0] ret_ecause;
   wire  [31:0] ret_result;
   wire  [31:2] ret_target;
-  wire  [15:0] ret_bptag;
   wire         ret_bptaken;
   wire         ret_forwarded;
+
+  wire [BPATTR_WIDTH-1:0] ret_bpattr_r;
+  wire [31:2]             ret_bptarget_r;
 
   wire [ROBID_MSB:0] ret_rd_addr;
   wire               ret_rd_addr_pol;
@@ -105,9 +111,13 @@ module rob #(
   wire br_result;
   assign br_result = ret_result[0] ^ ret_retop[0];
 
-  wire ret_exc, ret_mispred;
+  wire ret_exc, ret_mispred_type, ret_mispred_dir, ret_mispred_tgt, ret_mispred;
   assign ret_exc = ret_valid & ret_error;
-  assign ret_mispred = ret_valid & (ret_retop[4] | (ret_retop[6] & (br_result ^ ret_bptaken)));
+  assign ret_mispred_type = ret_bptaken & ~ret_retop[4] & ~ret_retop[6];
+  assign ret_mispred_tgt = ret_retop[4] & ret_forwarded & (ret_bptarget_r != ret_result[31:2]);
+  assign ret_mispred_dir = ret_retop[4] & ~ret_bptaken |
+                           ret_retop[6] & (br_result ^ ret_bptaken);
+  assign ret_mispred = ret_valid & (ret_mispred_type | ret_mispred_tgt | ret_mispred_dir);
 
   // decode interface
   assign rob_full = buf_full;
@@ -120,8 +130,12 @@ module rob #(
   assign rob_flush = ret_exc | ret_mispred;
 
   // fetch interface
-  mux #(30, 4) rob_flush_pc_mux({ret_error, ret_forwarded},
-      {csr_tvec, csr_tvec, ret_result[31:2], ret_target}, rob_flush_pc);
+  assign rob_ret_branch = rob_ret_valid & (ret_retop[4] | ret_retop[6]);
+  assign rob_ret_bptaken = br_result;
+  assign rob_ret_uncond = ret_retop[4];
+  assign rob_ret_bpattr = ret_bpattr_r;
+  assign rob_ret_addr = ret_addr;
+  assign rob_ret_target = ret_error ? csr_tvec : (ret_forwarded ? ret_result[31:2] : ret_target);
 
   // csr interface
   assign rob_ret_valid = ret_valid & ~ret_error;
@@ -134,12 +148,7 @@ module rob #(
   // rat interface
   assign rob_ret_commit = rob_ret_valid & ~ret_rd[5];
   assign rob_ret_rd = ret_rd[4:0];
-  mux #(32, 2) rob_ret_result_mux(ret_forwarded, {{ret_target,2'b0}, ret_result}, rob_ret_result);
-
-  // brpred interface
-  assign rob_ret_branch = rob_ret_valid & ret_retop[6];
-  assign rob_ret_bptag = ret_bptag;
-  assign rob_ret_bptaken = br_result;
+  assign rob_ret_result = ret_forwarded ? {ret_target,2'b0} : ret_result;
 
   // lsq interface (out)
   assign rob_ret_store = rob_ret_valid & ret_retop[3];
@@ -183,9 +192,11 @@ module rob #(
       flop #(30) buf_addr_flop  (clk, 0, 0, buf_tail_en[i], decode_addr,    buf_addr     [(i+1)*30-1:i*30]);
       flop #(6)  buf_rd_flop    (clk, 0, 0, buf_tail_en[i], decode_rd,      buf_rd       [(i+1)*6-1:i*6]);
       flop #(30) buf_target_flop(clk, 0, 0, buf_tail_en[i], decode_target,  buf_target   [(i+1)*30-1:i*30]);
-      flop #(16) buf_bptag_flop (clk, 0, 0, buf_tail_en[i], decode_bptag,   buf_bptag    [(i+1)*16-1:i*16]);
       flop buf_bptaken_flop     (clk, 0, 0, buf_tail_en[i], decode_bptaken, buf_bptaken  [i]);
       flop buf_forward_flop     (clk, 0, 0, buf_tail_en[i], decode_forward, buf_forwarded[i]);
+
+      dff #(BPATTR_WIDTH) u_bpattr_r   (bpattr_r[i*BPATTR_WIDTH+:BPATTR_WIDTH], decode_bpattr, clk, buf_tail_en[i]);
+      dff #(30)           u_bptarget_r (bptarget_r[i*30+:30], decode_bptarget, clk, buf_tail_en[i]);
     end
   endgenerate
 
@@ -198,7 +209,6 @@ module rob #(
   wire [ 4:0] read_ecause;
   wire [31:0] read_result;
   wire [29:0] read_target;
-  wire [15:0] read_bptag;
   wire        read_bptaken;
   wire        read_forwarded;
   premux #(1,  ROB_SIZE) buf_executed_mux(ret_rd_addr_splat, buf_executed, read_executed);
@@ -209,9 +219,13 @@ module rob #(
   premux #(5,  ROB_SIZE) buf_ecause_mux(ret_rd_addr_splat, buf_ecause, read_ecause);
   premux #(32, ROB_SIZE) buf_result_mux(ret_rd_addr_splat, buf_result, read_result);
   premux #(30, ROB_SIZE) buf_target_mux(ret_rd_addr_splat, buf_target, read_target);
-  premux #(16, ROB_SIZE) buf_bptag_mux(ret_rd_addr_splat, buf_bptag, read_bptag);
   premux #(1,  ROB_SIZE) buf_bptaken_mux(ret_rd_addr_splat, buf_bptaken, read_bptaken);
   premux #(1,  ROB_SIZE) buf_forwarded_mux(ret_rd_addr_splat, buf_forwarded, read_forwarded);
+
+  wire [BPATTR_WIDTH-1:0] read_bpattr;
+  wire [31:2]             read_bptarget;
+  premux #(BPATTR_WIDTH,ROB_SIZE) u_read_bpattr   (ret_rd_addr_splat, bpattr_r,   read_bpattr);
+  premux #(30,          ROB_SIZE) u_read_bptarget (ret_rd_addr_splat, bptarget_r, read_bptarget);
 
   flop ret_valid_flop(clk, rst | rob_flush, 0, 1,
       read_executed & ~ret_rd_empty & (~read_retop[3] | ~rob_rename_ishead), ret_valid);
@@ -221,10 +235,12 @@ module rob #(
   flop #(5)  ret_ecause_flop    (clk, 0, 0, 1, read_ecause, ret_ecause);
   flop #(32) ret_result_flop    (clk, 0, 0, 1, read_result, ret_result);
   flop #(30) ret_target_flop    (clk, 0, 0, 1, read_target, ret_target);
-  flop #(16) ret_bptag_flop     (clk, 0, 0, 1, read_bptag, ret_bptag);
   flop ret_error_flop           (clk, 0, 0, 1, read_error, ret_error);
   flop ret_bptaken_flop         (clk, 0, 0, 1, read_bptaken, ret_bptaken);
   flop ret_forwarded_flop       (clk, 0, 0, 1, read_forwarded, ret_forwarded);
+
+  dff #(BPATTR_WIDTH) u_ret_bpattr_r   (ret_bpattr_r,   read_bpattr,   clk, 1'b1);
+  dff #(30)           u_ret_bptarget_r (ret_bptarget_r, read_bptarget, clk, 1'b1);
 
 `ifndef SYNTHESIS
   always @(posedge clk) begin

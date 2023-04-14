@@ -1,75 +1,131 @@
-// two-level adaptive branch predictor
-module brpred(
-  input         clk,
-  input         rst,
+// branch predictor top level
+module brpred #(
+  parameter BTB_NUM_SETS = 256,
+  parameter BTB_NUM_WAYS = 2,
+  parameter PHT_IDX_MSB = 13,
+  parameter BPATTR_WIDTH = 3
+  )(
+  input                     clk,
+  input                     rst,
 
   // fetch interface
-  input         fetch_bp_req,
-  input [31:2]  fetch_bp_addr,
-  output [15:0] brpred_bptag,
-  output        brpred_bptaken,
+  input                     fetch_brpred_ready,
+  output                    brpred_fetch_valid,
+  output                    brpred_fetch_bptaken,
+  output [BPATTR_WIDTH-1:0] brpred_fetch_bpattr,
+  output [31:2]             brpred_fetch_addr,
+  output [31:2]             brpred_fetch_target,
 
   // rob interface
-  input         rob_flush,
-  input         rob_ret_branch,
-  input [15:0]  rob_ret_bptag,
-  input         rob_ret_bptaken);
+  input                     rob_flush,
+  input                     rob_ret_branch,
+  input                     rob_ret_bptaken,
+  input                     rob_ret_uncond,
+  input [BPATTR_WIDTH-1:0]  rob_ret_bpattr,
+  input [31:2]              rob_ret_addr,
+  input [31:2]              rob_ret_target);
 
-  wire [1:0]   pht [0:16383];
+  /*AUTOWIRE*/
+  // Beginning of automatic wires (for undeclared instantiated-module outputs)
+  wire                  btb_brpred_ready;
+  wire [31:2]           btb_brpred_target;
+  wire                  btb_brpred_uncond;
+  wire                  btb_brpred_valid;
+  wire                  pht_brpred_bptaken;
+  wire                  pht_brpred_phtsat;
+  wire                  pht_brpred_ready;
+  // End of automatics
 
-  wire         req_r;
-  wire [13:0]  arch_bhr, spec_bhr;
-  wire [13:0]  pht_rd_addr_r;
-  wire [1:0]   pht_rd_data;
-  wire [1:0]   pht_wr_data;
+  // s0 stage
+  wire        valid_s0;
+  wire [31:2] pc_s0;
 
-  wire [13:0] arch_bhr_next, spec_bhr_next;
-  wire [13:0] pht_rd_addr;
+  wire        pc_s0_en;
+  wire [31:2] pc_s0_nxt;
+  wire [31:2] pc_s0_r;
 
-  assign arch_bhr_next = {arch_bhr[12:0],rob_ret_bptaken};
-  assign spec_bhr_next = {spec_bhr[12:0],brpred_bptaken};
+  // s1 stage
+  wire        valid_s1_r;
+  wire [31:2] pc_s1_r;
 
-  // we must forward the bhr during consecutive branch predictions
-  assign pht_rd_addr = (req_r ? spec_bhr_next : spec_bhr) ^ fetch_bp_addr[16:3];
+  wire        replay_s1;
+  wire        bptaken_s1;
 
-  assign brpred_bptag = {pht_rd_data,pht_rd_addr_r};
-  assign brpred_bptaken = pht_rd_data[1];
+  // s0 stage
+  assign valid_s0 = fetch_brpred_ready & btb_brpred_ready & pht_brpred_ready & ~rob_flush;
+  assign pc_s0 = bptaken_s1 ? btb_brpred_target : pc_s0_r;
 
-  // pht_wr_data
-  assign pht_wr_data[1] = (rob_ret_bptaken & (|rob_ret_bptag[15:14])) | (&rob_ret_bptag[15:14]);
-  assign pht_wr_data[0] = (~rob_ret_bptag[14] & (rob_ret_bptag[15] | rob_ret_bptaken)) | 
-    (&{rob_ret_bptaken, rob_ret_bptag[15:14]});
- 
-  sram_1r1w #(14,2,1) pht_ram (
-    .rd_clk(clk),
-    .rd_en(fetch_bp_req),
-    .rd_addr(pht_rd_addr),
-    .rd_data(pht_rd_data),
-    .wr_clk(clk),
-    .wr_en(rob_ret_branch),
-    .wr_addr(rob_ret_bptag[13:0]),
-    .wr_data(pht_wr_data));
+  assign pc_s0_en = rob_flush | replay_s1 | valid_s0 | bptaken_s1;
+  assign pc_s0_nxt = rob_flush ? rob_ret_target :
+                     replay_s1 ? pc_s1_r :
+                      valid_s0 ? (pc_s0 + 30'b1) :
+                                 pc_s0;
+  dffr #(30,30'h04000000) u_pc_s0_r (pc_s0_r, pc_s0_nxt, clk, pc_s0_en, rst);
 
-  // req_r
-  flop req_r_flop (.clk(clk), .rst(rst|~fetch_bp_req), .set(~rst&fetch_bp_req), .enable(1'b0), .d(1'b0), .q(req_r));
+  // s1 stage
+  dffr       u_valid_s1_r (valid_s1_r, valid_s0, clk, 1'b1, rst);
+  dff  #(30) u_pc_s1_r    (pc_s1_r,    pc_s0,    clk, valid_s0);
 
-  // arch_bhr
-  flop #(14) arch_bhr_flop (.clk(clk), .rst(rst), .set(1'b0), .enable(rob_ret_branch), .d(arch_bhr_next), .q(arch_bhr));
+  assign replay_s1 = valid_s1_r & ~fetch_brpred_ready;
+  assign bptaken_s1 = valid_s1_r & btb_brpred_valid & (btb_brpred_uncond | pht_brpred_bptaken);
 
-  // spec_bhr
-  wire [13:0] spec_bhr_in;
-  wire [13:0] spec_bhr_flush;
-  mux #(14, 2) spec_bhr_flush_mux (.sel(rob_ret_branch), .in({arch_bhr_next, arch_bhr}),
-      .out(spec_bhr_flush));
-  mux #(14, 2) spec_bhr_in_mux (.sel(rob_flush),
-      .in({spec_bhr_flush, spec_bhr_next}), .out(spec_bhr_in));
+  assign brpred_fetch_valid = valid_s1_r;
+  assign brpred_fetch_bptaken = bptaken_s1;
+  assign brpred_fetch_bpattr = {btb_brpred_uncond,btb_brpred_valid,pht_brpred_phtsat};
+  assign brpred_fetch_addr = pc_s1_r;
+  assign brpred_fetch_target = btb_brpred_target;
 
-  wire spec_bhr_en = rob_flush | req_r;
-  flop #(14) spec_bhr_flop (.clk(clk), .rst(rst), .set(1'b0), .enable(spec_bhr_en),
-      .d(spec_bhr_in), .q(spec_bhr));
+  assign rob_ret_phtsat = rob_ret_bpattr[0];
+  assign rob_ret_btbhit = rob_ret_bpattr[1];
+  assign rob_ret_btbuncond = rob_ret_bpattr[2];
 
-  // pht_rd_addr_r
-  flop #(14) pht_rd_addr_r_flop (.clk(clk), .rst(1'b0), .set(1'b0), 
-      .enable(fetch_bp_req), .d(pht_rd_addr), .q(pht_rd_addr_r));
+  btb #(
+    /*AUTOINSTPARAM*/
+        // Parameters
+        .BTB_NUM_SETS   (BTB_NUM_SETS),
+        .BTB_NUM_WAYS   (BTB_NUM_WAYS)) u_btb (
+    // Inputs
+    .brpred_btb_valid(valid_s0),
+    .brpred_btb_addr(pc_s0[31:2]),
+    /*AUTOINST*/
+    // Outputs
+    .btb_brpred_ready(btb_brpred_ready),
+    .btb_brpred_target(btb_brpred_target[31:2]),
+    .btb_brpred_uncond(btb_brpred_uncond),
+    .btb_brpred_valid(btb_brpred_valid),
+    // Inputs
+    .clk(clk),
+    .rob_flush(rob_flush),
+    .rob_ret_addr(rob_ret_addr),
+    .rob_ret_bptaken(rob_ret_bptaken),
+    .rob_ret_branch(rob_ret_branch),
+    .rob_ret_btbhit(rob_ret_btbhit),
+    .rob_ret_btbuncond(rob_ret_btbuncond),
+    .rob_ret_target(rob_ret_target),
+    .rob_ret_uncond(rob_ret_uncond),
+    .rst(rst));
+
+  pht #(
+    /*AUTOINSTPARAM*/
+        // Parameters
+        .PHT_IDX_MSB    (PHT_IDX_MSB)) u_pht (
+    // Inputs
+    .brpred_pht_valid(valid_s0),
+    .brpred_pht_addr(pc_s0[31:2]),
+    /*AUTOINST*/
+    // Outputs
+    .pht_brpred_bptaken(pht_brpred_bptaken),
+    .pht_brpred_phtsat(pht_brpred_phtsat),
+    .pht_brpred_ready(pht_brpred_ready),
+    // Inputs
+    .btb_brpred_uncond(btb_brpred_uncond),
+    .btb_brpred_valid(btb_brpred_valid),
+    .clk(clk),
+    .rob_flush(rob_flush),
+    .rob_ret_addr(rob_ret_addr),
+    .rob_ret_bptaken(rob_ret_bptaken),
+    .rob_ret_branch(rob_ret_branch),
+    .rob_ret_phtsat(rob_ret_phtsat),
+    .rst(rst));
 
 endmodule
