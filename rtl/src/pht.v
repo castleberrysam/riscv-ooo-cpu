@@ -16,27 +16,34 @@ module pht #(
   input                 btb_brpred_valid,
   input                 btb_brpred_uncond,
 
+  // fetch interface
+  input                 fetch_brpred_ready,
+
   // rob interface
   input                 rob_flush,
   input                 rob_ret_branch,
   input                 rob_ret_bptaken,
   input                 rob_ret_phtsat,
+  input                 rob_ret_btbhit,
+  input                 rob_ret_btbuncond,
   input [31:2]          rob_ret_addr);
 
+  wire                 arch_bhr_update;
   wire [PHT_IDX_MSB:0] arch_bhr_nxt;
+  assign arch_bhr_update = rob_ret_branch & rob_ret_btbhit & ~rob_ret_btbuncond;
   assign arch_bhr_nxt = {arch_bhr_r[PHT_IDX_MSB-1:0],rob_ret_bptaken};
 
   wire [PHT_IDX_MSB:0] arch_bhr_r;
-  dffr #(PHT_IDX_MSB+1) u_arch_bhr_r (arch_bhr_r, arch_bhr_nxt, clk, rob_ret_branch, rst);
+  dffr #(PHT_IDX_MSB+1) u_arch_bhr_r (arch_bhr_r, arch_bhr_nxt, clk, arch_bhr_update, rst);
 
   wire                 spec_bhr_update;
   wire                 spec_bhr_en;
   wire [PHT_IDX_MSB:0] spec_bhr_nxt;
   wire [PHT_IDX_MSB:0] spec_bhr_in;
-  assign spec_bhr_update = brpred_rd_valid_r & btb_brpred_valid & ~btb_brpred_uncond;
+  assign spec_bhr_update = brpred_rd_valid_r & fetch_brpred_ready & btb_brpred_valid & ~btb_brpred_uncond;
   assign spec_bhr_en = rob_flush | spec_bhr_update;
   assign spec_bhr_nxt = {spec_bhr_r[PHT_IDX_MSB-1:0],pht_brpred_bptaken};
-  assign spec_bhr_in = rob_flush ? (rob_ret_branch ? arch_bhr_nxt : arch_bhr_r) : spec_bhr_nxt;
+  assign spec_bhr_in = rob_flush ? (arch_bhr_update ? arch_bhr_nxt : arch_bhr_r) : spec_bhr_nxt;
 
   wire [PHT_IDX_MSB:0] spec_bhr_r;
   dffr #(PHT_IDX_MSB+1) u_spec_bhr_r (spec_bhr_r, spec_bhr_in, clk, spec_bhr_en, rst);
@@ -52,7 +59,7 @@ module pht #(
   wire                 update_valid;
   wire                 update_bptaken;
   wire [PHT_IDX_MSB:0] update_idx;
-  assign update_valid = rob_ret_branch & (rob_flush | ~rob_ret_phtsat);
+  assign update_valid = arch_bhr_update & (rob_flush | ~rob_ret_phtsat);
   assign update_bptaken = rob_ret_bptaken;
   assign update_idx = arch_bhr_r ^ rob_ret_addr[3+:PHT_IDX_MSB+1];
 

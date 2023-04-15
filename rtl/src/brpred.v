@@ -51,6 +51,11 @@ module brpred #(
   wire        replay_s1;
   wire        bptaken_s1;
 
+  // rob bpattr
+  wire        rob_ret_phtsat;
+  wire        rob_ret_btbhit;
+  wire        rob_ret_btbuncond;
+
   // s0 stage
   assign valid_s0 = fetch_brpred_ready & btb_brpred_ready & pht_brpred_ready & ~rob_flush;
   assign pc_s0 = bptaken_s1 ? btb_brpred_target : pc_s0_r;
@@ -121,10 +126,13 @@ module brpred #(
     .btb_brpred_uncond(btb_brpred_uncond),
     .btb_brpred_valid(btb_brpred_valid),
     .clk(clk),
+    .fetch_brpred_ready(fetch_brpred_ready),
     .rob_flush(rob_flush),
     .rob_ret_addr(rob_ret_addr),
     .rob_ret_bptaken(rob_ret_bptaken),
     .rob_ret_branch(rob_ret_branch),
+    .rob_ret_btbhit(rob_ret_btbhit),
+    .rob_ret_btbuncond(rob_ret_btbuncond),
     .rob_ret_phtsat(rob_ret_phtsat),
     .rst(rst));
 

@@ -48,6 +48,8 @@ module fetch #(
   wire                  brpred_fetch_valid;
   // End of automatics
 
+  wire fetch_brpred_ready;
+
   wire fq_empty;
   wire fq_full;
 

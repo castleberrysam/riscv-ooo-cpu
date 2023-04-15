@@ -101,7 +101,8 @@ module btb #(
   assign alloc_way_wr_data = {alloc_target_r,rd_tag_r,alloc_uncond_r,1'b1};
 
   // when a branch marked unconditional was not-taken, demote to conditional
-  assign uncond_update_valid = rob_ret_branch & rob_ret_btbhit & rob_ret_btbuncond & ~rob_ret_bptaken;
+  assign uncond_update_valid = rob_ret_branch & ~rob_ret_uncond & ~rob_ret_bptaken &
+                               rob_ret_btbhit & rob_ret_btbuncond;
 
   dffr u_uncond_update_valid_r (uncond_update_valid_r, uncond_update_valid, clk, 1'b1, rst);
 
