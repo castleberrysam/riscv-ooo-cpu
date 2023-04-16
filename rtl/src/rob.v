@@ -14,6 +14,8 @@ module rob #(
   input [31:2]              decode_addr,
   input [5:0]               decode_rd,
   input                     decode_bptaken,
+  input                     decode_raspush,
+  input                     decode_raspop,
   input [BPATTR_WIDTH-1:0]  decode_bpattr,
   input [31:2]              decode_bptarget,
   input                     decode_forward,
@@ -40,6 +42,8 @@ module rob #(
   output                    rob_ret_branch,
   output                    rob_ret_bptaken,
   output                    rob_ret_uncond,
+  output                    rob_ret_raspush,
+  output                    rob_ret_raspop,
   output [BPATTR_WIDTH-1:0] rob_ret_bpattr,
   output [31:2]             rob_ret_addr,
   output [31:2]             rob_ret_target,
@@ -74,6 +78,8 @@ module rob #(
   wire [ROB_SIZE-1:0]    buf_bptaken;
   wire [ROB_SIZE-1:0]    buf_forwarded;
 
+  wire [ROB_SIZE-1:0]              raspush_r;
+  wire [ROB_SIZE-1:0]              raspop_r;
   wire [ROB_SIZE*BPATTR_WIDTH-1:0] bpattr_r;
   wire [ROB_SIZE*30-1:0]           bptarget_r;
 
@@ -93,6 +99,8 @@ module rob #(
   wire         ret_bptaken;
   wire         ret_forwarded;
 
+  wire                    ret_raspush_r;
+  wire                    ret_raspop_r;
   wire [BPATTR_WIDTH-1:0] ret_bpattr_r;
   wire [31:2]             ret_bptarget_r;
 
@@ -133,6 +141,8 @@ module rob #(
   assign rob_ret_branch = rob_ret_valid & (ret_retop[4] | ret_retop[6]);
   assign rob_ret_bptaken = br_result;
   assign rob_ret_uncond = ret_retop[4];
+  assign rob_ret_raspush = ret_raspush_r;
+  assign rob_ret_raspop = ret_raspop_r;
   assign rob_ret_bpattr = ret_bpattr_r;
   assign rob_ret_addr = ret_addr;
   assign rob_ret_target = ret_error ? csr_tvec : (ret_forwarded ? ret_result[31:2] : ret_target);
@@ -195,6 +205,8 @@ module rob #(
       flop buf_bptaken_flop     (clk, 0, 0, buf_tail_en[i], decode_bptaken, buf_bptaken  [i]);
       flop buf_forward_flop     (clk, 0, 0, buf_tail_en[i], decode_forward, buf_forwarded[i]);
 
+      dff                 u_raspush_r  (raspush_r[i],         decode_raspush,  clk, buf_tail_en[i]);
+      dff                 u_raspop_r   (raspop_r[i],          decode_raspop,   clk, buf_tail_en[i]);
       dff #(BPATTR_WIDTH) u_bpattr_r   (bpattr_r[i*BPATTR_WIDTH+:BPATTR_WIDTH], decode_bpattr, clk, buf_tail_en[i]);
       dff #(30)           u_bptarget_r (bptarget_r[i*30+:30], decode_bptarget, clk, buf_tail_en[i]);
     end
@@ -222,8 +234,12 @@ module rob #(
   premux #(1,  ROB_SIZE) buf_bptaken_mux(ret_rd_addr_splat, buf_bptaken, read_bptaken);
   premux #(1,  ROB_SIZE) buf_forwarded_mux(ret_rd_addr_splat, buf_forwarded, read_forwarded);
 
+  wire                    read_raspush;
+  wire                    read_raspop;
   wire [BPATTR_WIDTH-1:0] read_bpattr;
   wire [31:2]             read_bptarget;
+  premux #(1,           ROB_SIZE) u_read_raspush  (ret_rd_addr_splat, raspush_r,  read_raspush);
+  premux #(1,           ROB_SIZE) u_read_raspop   (ret_rd_addr_splat, raspop_r,   read_raspop);
   premux #(BPATTR_WIDTH,ROB_SIZE) u_read_bpattr   (ret_rd_addr_splat, bpattr_r,   read_bpattr);
   premux #(30,          ROB_SIZE) u_read_bptarget (ret_rd_addr_splat, bptarget_r, read_bptarget);
 
@@ -239,6 +255,8 @@ module rob #(
   flop ret_bptaken_flop         (clk, 0, 0, 1, read_bptaken, ret_bptaken);
   flop ret_forwarded_flop       (clk, 0, 0, 1, read_forwarded, ret_forwarded);
 
+  dff                 u_ret_raspush_r  (ret_raspush_r,  read_raspush,  clk, 1'b1);
+  dff                 u_ret_raspop_r   (ret_raspop_r,   read_raspop,   clk, 1'b1);
   dff #(BPATTR_WIDTH) u_ret_bpattr_r   (ret_bpattr_r,   read_bpattr,   clk, 1'b1);
   dff #(30)           u_ret_bptarget_r (ret_bptarget_r, read_bptarget, clk, 1'b1);
 

@@ -21,19 +21,25 @@ module brpred #(
   input                     rob_ret_branch,
   input                     rob_ret_bptaken,
   input                     rob_ret_uncond,
+  input                     rob_ret_raspush,
+  input                     rob_ret_raspop,
   input [BPATTR_WIDTH-1:0]  rob_ret_bpattr,
   input [31:2]              rob_ret_addr,
   input [31:2]              rob_ret_target);
 
   /*AUTOWIRE*/
   // Beginning of automatic wires (for undeclared instantiated-module outputs)
-  wire                  btb_brpred_ready;
-  wire [31:2]           btb_brpred_target;
-  wire                  btb_brpred_uncond;
-  wire                  btb_brpred_valid;
-  wire                  pht_brpred_bptaken;
-  wire                  pht_brpred_phtsat;
-  wire                  pht_brpred_ready;
+  wire        btb_brpred_raspop;
+  wire        btb_brpred_raspush;
+  wire        btb_brpred_ready;
+  wire [31:2] btb_brpred_target;
+  wire        btb_brpred_uncond;
+  wire        btb_brpred_valid;
+  wire        pht_brpred_bptaken;
+  wire        pht_brpred_phtsat;
+  wire        pht_brpred_ready;
+  wire [31:2] ras_brpred_target;
+  wire        ras_brpred_valid;
   // End of automatics
 
   // s0 stage
@@ -51,6 +57,11 @@ module brpred #(
   wire        replay_s1;
   wire        bptaken_s1;
 
+  // input to ras
+  wire        brpred_ras_push;
+  wire        brpred_ras_pop;
+  wire [31:2] brpred_ras_addr;
+
   // rob bpattr
   wire        rob_ret_phtsat;
   wire        rob_ret_btbhit;
@@ -58,7 +69,7 @@ module brpred #(
 
   // s0 stage
   assign valid_s0 = fetch_brpred_ready & btb_brpred_ready & pht_brpred_ready & ~rob_flush;
-  assign pc_s0 = bptaken_s1 ? btb_brpred_target : pc_s0_r;
+  assign pc_s0 = bptaken_s1 ? brpred_fetch_target : pc_s0_r;
 
   assign pc_s0_en = rob_flush | replay_s1 | valid_s0 | bptaken_s1;
   assign pc_s0_nxt = rob_flush ? rob_ret_target :
@@ -74,15 +85,22 @@ module brpred #(
   assign replay_s1 = valid_s1_r & ~fetch_brpred_ready;
   assign bptaken_s1 = valid_s1_r & btb_brpred_valid & (btb_brpred_uncond | pht_brpred_bptaken);
 
+  assign brpred_ras_push = valid_s1_r & fetch_brpred_ready & btb_brpred_valid & btb_brpred_raspush;
+  assign brpred_ras_pop = valid_s1_r & fetch_brpred_ready & btb_brpred_valid & btb_brpred_raspop;
+  assign brpred_ras_addr = pc_s1_r;
+
   assign brpred_fetch_valid = valid_s1_r;
   assign brpred_fetch_bptaken = bptaken_s1;
-  assign brpred_fetch_bpattr = {btb_brpred_uncond,btb_brpred_valid,pht_brpred_phtsat};
   assign brpred_fetch_addr = pc_s1_r;
-  assign brpred_fetch_target = btb_brpred_target;
+  assign brpred_fetch_target = (btb_brpred_raspop & ras_brpred_valid) ? ras_brpred_target : btb_brpred_target;
 
-  assign rob_ret_phtsat = rob_ret_bpattr[0];
-  assign rob_ret_btbhit = rob_ret_bpattr[1];
-  assign rob_ret_btbuncond = rob_ret_bpattr[2];
+  // bpattr encode/decode
+  assign brpred_fetch_bpattr = {btb_brpred_uncond,
+                                btb_brpred_valid,
+                                pht_brpred_phtsat};
+  assign {rob_ret_btbuncond,
+          rob_ret_btbhit,
+          rob_ret_phtsat} = rob_ret_bpattr;
 
   btb #(
     /*AUTOINSTPARAM*/
@@ -94,6 +112,8 @@ module brpred #(
     .brpred_btb_addr(pc_s0[31:2]),
     /*AUTOINST*/
     // Outputs
+    .btb_brpred_raspop(btb_brpred_raspop),
+    .btb_brpred_raspush(btb_brpred_raspush),
     .btb_brpred_ready(btb_brpred_ready),
     .btb_brpred_target(btb_brpred_target[31:2]),
     .btb_brpred_uncond(btb_brpred_uncond),
@@ -106,8 +126,27 @@ module brpred #(
     .rob_ret_branch(rob_ret_branch),
     .rob_ret_btbhit(rob_ret_btbhit),
     .rob_ret_btbuncond(rob_ret_btbuncond),
+    .rob_ret_raspop(rob_ret_raspop),
+    .rob_ret_raspush(rob_ret_raspush),
     .rob_ret_target(rob_ret_target),
     .rob_ret_uncond(rob_ret_uncond),
+    .rst(rst));
+
+  ras u_ras (
+    /*AUTOINST*/
+    // Outputs
+    .ras_brpred_target(ras_brpred_target[31:2]),
+    .ras_brpred_valid(ras_brpred_valid),
+    // Inputs
+    .brpred_ras_addr(brpred_ras_addr[31:2]),
+    .brpred_ras_pop(brpred_ras_pop),
+    .brpred_ras_push(brpred_ras_push),
+    .clk(clk),
+    .rob_flush(rob_flush),
+    .rob_ret_addr(rob_ret_addr),
+    .rob_ret_branch(rob_ret_branch),
+    .rob_ret_raspop(rob_ret_raspop),
+    .rob_ret_raspush(rob_ret_raspush),
     .rst(rst));
 
   pht #(

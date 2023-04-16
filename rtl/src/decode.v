@@ -22,6 +22,8 @@ module decode #(
   output [1:0]              decode_ecause,
   output [6:0]              decode_retop,
   output                    decode_bptaken,
+  output                    decode_raspush,
+  output                    decode_raspop,
   output [BPATTR_WIDTH-1:0] decode_bpattr,
   output [31:2]             decode_bptarget,
   input                     rob_flush,
@@ -159,6 +161,15 @@ module decode #(
   mux #(2, 4) decode_ecause_mux({error, 1'b0/*addr[1]*/}, {ERR_IALIGN, ERR_IFAULT, ERR_IILLEGAL, ERR_IILLEGAL}, decode_ecause);
   assign decode_retop = {fmt_b, insn_csr, fmt_j | insn_jalr, fmt_s, funct3[2:0]};
   assign decode_bptaken = bptaken;
+
+  // ras push/pop is according to hints given in the spec
+  wire rd_is_link, rs1_is_link, rd_is_rs1;
+  assign rd_is_link = (rd == 5'd1) | (rd == 5'd5);
+  assign rs1_is_link = (rs1 == 5'd1) | (rs1 == 5'd5);
+  assign rd_is_rs1 = (rd == rs1);
+  assign decode_raspush = (fmt_j | insn_jalr) & rd_is_link;
+  assign decode_raspop = insn_jalr & rs1_is_link & (~rd_is_link | ~rd_is_rs1);
+
   assign decode_bpattr = bpattr_r;
   assign decode_bptarget = bptarget_r;
 

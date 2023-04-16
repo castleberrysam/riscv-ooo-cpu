@@ -33,6 +33,8 @@ module fetch #(
   input                     rob_ret_branch,
   input                     rob_ret_bptaken,
   input                     rob_ret_uncond,
+  input                     rob_ret_raspush,
+  input                     rob_ret_raspop,
   input [BPATTR_WIDTH-1:0]  rob_ret_bpattr,
   input [31:2]              rob_ret_addr,
   input [31:2]              rob_ret_target);
@@ -155,6 +157,8 @@ module fetch #(
     .rob_ret_bpattr(rob_ret_bpattr),
     .rob_ret_bptaken(rob_ret_bptaken),
     .rob_ret_branch(rob_ret_branch),
+    .rob_ret_raspop(rob_ret_raspop),
+    .rob_ret_raspush(rob_ret_raspush),
     .rob_ret_target(rob_ret_target),
     .rob_ret_uncond(rob_ret_uncond),
     .rst(rst));
