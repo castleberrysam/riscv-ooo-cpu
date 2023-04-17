@@ -61,7 +61,6 @@ module lsq #(
   wire [(3*16)-1:0]             lq_type;
   wire [((ROBID_MSB+1)*16)-1:0] lq_robid;
   wire [(5*16)-1:0]             lq_rd;
-  wire [(32*16)-1:0]            lq_base;
   wire [(32*16)-1:0]            lq_imm;
   wire [(32*16)-1:0]            lq_addr;
   wire [(32*16)-1:0]            lq_data;
@@ -73,8 +72,13 @@ module lsq #(
   wire [15:0]        lq_insert_sel;
   wire [15:0]        lq_insert_en;
 
-  wire               lq_issue_rdy, lq_issue_rdy_r;
-  wire [15:0]        lq_issuse_sel, lq_issue_sel_r;
+  wire               lq_issue_rdy;
+  wire [15:0]        lq_issue_sel;
+  wire [15:0]        lq_issued_fwd;
+
+  wire               lq_issue_rdy_nxt;
+  wire               lq_issue_rdy_r;
+  wire [15:0]        lq_issue_sel_r;
 
   wire               lq_issue_req;
   wire               lq_issue_beat;
@@ -210,7 +214,7 @@ module lsq #(
   wire [31:0] lq_addrgen_base, lq_addrgen_imm;
   premux #(32,16) lq_addrgen_base_mux(
     .sel(lq_addrgen_sel),
-    .in(lq_base),
+    .in(lq_addr),
     .out(lq_addrgen_base));
   premux #(32,16) lq_addrgen_imm_mux(
     .sel(lq_addrgen_sel),
@@ -266,38 +270,6 @@ module lsq #(
     .d(rename_imm),
     .q(lq_imm));
 
-  // lq_base
-  wire [(32*16)-1:0] lq_base_next;
-
-  wire [15:0] lq_base_cmp;
-  generate
-    for(i = 0; i < 16; i=i+1)
-      assign lq_base_cmp[i] = ~|(lq_base[i*32+:ROBID_MSB+1] ^ wb_robid);
-  endgenerate
-
-  wire [15:0] lq_base_fwd_en = {16{wb_en}} & lq_valid & ~lq_base_rdy & lq_base_cmp;
-
-  mux #(32,2) lq_base_next_mux[15:0](
-    .sel(lq_base_fwd_en),
-    .in({wb_result,rename_op1}),
-    .out(lq_base_next));
-
-  flop #(32) lq_base_r[15:0](
-    .clk(clk),
-    .rst(1'b0),
-    .set(1'b0),
-    .enable(lq_insert_en | lq_base_fwd_en),
-    .d(lq_base_next),
-    .q(lq_base));
-
-  flop lq_base_rdy_r[15:0](
-    .clk(clk),
-    .rst(1'b0),
-    .set(lq_base_fwd_en),
-    .enable(lq_insert_en),
-    .d(rename_op1ready),
-    .q(lq_base_rdy));
-
   // lq_op2
   wire [(8*16)-1:0] lq_op2_next;
 
@@ -331,22 +303,47 @@ module lsq #(
     .q(lq_op2_rdy));
 
   // lq_addr
-  wire [15:0] lq_addrgen_en = lq_addrgen_sel & {16{lq_addrgen_req}};
+  wire [15:0]        lq_addrgen_en;
+  wire [15:0]        lq_base_fwd_en;
+  wire [(32*16)-1:0] lq_addr_nxt;
+
+  assign lq_addrgen_en = lq_addrgen_sel & {16{lq_addrgen_req}};
+  generate
+    for(i = 0; i < 16; i=i+1) begin
+      assign lq_base_fwd_en[i] = lq_valid[i] & ~lq_base_rdy[i] &
+                                 wb_en & (lq_addr[i*32+:ROBID_MSB+1] == wb_robid);
+      assign lq_addr_nxt[i*32+:32] = lq_base_fwd_en[i] ? wb_result :
+                                      lq_addrgen_en[i] ? lq_addrgen_addr :
+                                                         rename_op1;
+    end
+  endgenerate
 
   flop #(32) lq_addr_r[15:0](
     .clk(clk),
     .rst(1'b0),
     .set(1'b0),
-    .enable(lq_addrgen_en),
-    .d(lq_addrgen_addr),
+    .enable(lq_insert_en | lq_base_fwd_en | lq_addrgen_en),
+    .d(lq_addr_nxt),
     .q(lq_addr));
+
+  flop lq_base_rdy_r[15:0](
+    .clk(clk),
+    .rst(1'b0),
+    .set(lq_base_fwd_en),
+    .enable(lq_insert_en),
+    .d(rename_op1ready),
+    .q(lq_base_rdy));
+
+  // skip addrgen when imm == 0
+  wire lq_addr_rdy_nxt;
+  assign lq_addr_rdy_nxt = (rename_imm == 32'd0);
 
   flop lq_addr_rdy_r[15:0](
     .clk(clk),
-    .rst(lq_insert_en),
+    .rst(1'b0),
     .set(lq_addrgen_en),
-    .enable(1'b0),
-    .d(1'b0),
+    .enable(lq_insert_en),
+    .d(lq_addr_rdy_nxt),
     .q(lq_addr_rdy));
 
   // lq_issued
@@ -405,12 +402,13 @@ module lsq #(
     .rst(rst),
     .insert_valid(lq_insert_beat),
     .insert_sel(lq_insert_sel),
-    .req(lq_valid & lq_addr_rdy & ~lq_issued_fwd),
+    .req(lq_valid & lq_base_rdy & lq_addr_rdy & ~lq_issued_fwd),
     .grant_valid(lq_issue_rdy),
     .grant(lq_issue_sel));
 
-  dffr       u_lq_issue_rdy_r (lq_issue_rdy_r, lq_issue_rdy, clk, 1'b1, rst);
-  dff  #(16) u_lq_issue_sel_r (lq_issue_sel_r, lq_issue_sel, clk, lq_issue_rdy);
+  assign lq_issue_rdy_nxt = lq_issue_rdy & ~rob_flush;
+  dffr       u_lq_issue_rdy_r (lq_issue_rdy_r, lq_issue_rdy_nxt, clk, 1'b1, rst);
+  dff  #(16) u_lq_issue_sel_r (lq_issue_sel_r, lq_issue_sel,     clk, lq_issue_rdy_nxt);
 
   agearr #(16,16) lq_sq_agearr(
     .clk(clk),
