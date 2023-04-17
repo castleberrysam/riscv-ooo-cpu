@@ -14,9 +14,9 @@ SRCS_S := $(filter-out startup.s, $(wildcard *.s))
 SRCS_C := $(filter-out stdlib.c, $(wildcard *.c))
 SRCS_CXX := $(wildcard *.cpp)
 OUTS_O := $(SRCS_S:.s=.o) $(SRCS_C:.c=.o) $(SRCS_CXX:.cpp=.o)
-OUTS_ELF := $(OUTS_O:.o=.elf)
-OUTS_HEX := $(OUTS_O:.o=.hex)
-OUTS_DIS := $(OUTS_O:.o=.dis)
+OUTS_ELF := $(OUTS_O:.o=.elf) coremark.elf
+OUTS_HEX := $(OUTS_O:.o=.hex) coremark.hex
+OUTS_DIS := $(OUTS_O:.o=.dis) coremark.dis
 
 .PHONY: all clean
 
@@ -24,6 +24,10 @@ all: $(OUTS_O) $(OUTS_ELF) $(OUTS_HEX) $(OUTS_DIS) startup.o stdlib.o
 
 %.elf: %.o startup.o stdlib.o link.ld
 	$(CXX) $(LFLAGS) -Tlink.ld -o $*.elf startup.o $< stdlib.o
+coremark.elf: coremark
+	$(MAKE) -C coremark $@
+	rm -f $@
+	ln coremark/$@ $@
 
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@
