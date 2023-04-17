@@ -1,5 +1,5 @@
-// 32 x 32 multiplier
-module mul(
+// 32 x 32 multiplier, radix-4 serial implementation (16 cycle latency)
+module mul_booth(
   input         clk,
   input         rst,
 

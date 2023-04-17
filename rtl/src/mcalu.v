@@ -76,7 +76,7 @@ module mcalu #(
     .sc_result(sc_result));
 
   // Complex Ops
-  mul mul(
+  mul_behav mul(
     .clk(clk),
     .rst(rst | rob_flush),
     .req(valid & is_mc_op & ~op[2]),
