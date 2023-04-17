@@ -44,10 +44,15 @@ module csr(
   input         l2fifo_l2_req);
 
   localparam
+    MTVEC     = 12'h305,
     MCYCLE    = 12'hB00,
     MINSTRET  = 12'hB02,
     MCYCLEH   = 12'hB80,
     MINSTRETH = 12'hB82,
+    CYCLE     = 12'hC00,
+    INSTRET   = 12'hC02,
+    CYCLEH    = 12'hC80,
+    INSTRETH  = 12'hC82,
     MUARTSTAT = 12'hFC0,
     MUARTRX   = 12'hFC1,
     MUARTTX   = 12'h7C0,
@@ -66,6 +71,8 @@ module csr(
     MUARTSTAT_TXFULL  = 32'h00000008;
 
   // Supported CSRs
+  wire [31:2] mtvec_r;
+
   wire [31:0] mcycle; 
   wire [31:0] mcycleh;
   wire [31:0] minstret;
@@ -73,12 +80,10 @@ module csr(
   wire [7:0] muarttx;
 
   // Updated CSR value
-  wire [31:0] mcycle_n; 
+  wire [31:0] mcycle_n;
   wire [31:0] mcycleh_n;
   wire [31:0] minstret_n;
   wire [31:0] minstreth_n;
-
-
 
   // Stage latches
   wire valid;
@@ -108,27 +113,46 @@ module csr(
   assign csr_rd = rd;
 
   // address decoder
-  wire sel_mcycle     = ~|(addr ^ MCYCLE);
-  wire sel_mcycleh    = ~|(addr ^ MCYCLEH);
-  wire sel_minstret   = ~|(addr ^ MINSTRET);
-  wire sel_minstreth  = ~|(addr ^ MINSTRETH);
+  wire sel_mtvec;
+  wire sel_mcycle;
+  wire sel_mcycleh;
+  wire sel_minstret;
+  wire sel_minstreth;
+  assign sel_mtvec     = (addr == MTVEC);
+  assign sel_mcycle    = (addr == MCYCLE) | (addr == CYCLE);
+  assign sel_mcycleh   = (addr == MCYCLEH) | (addr == CYCLEH);
+  assign sel_minstret  = (addr == MINSTRET) | (addr == INSTRET);
+  assign sel_minstreth = (addr == MINSTRETH) | (addr == INSTRETH);
+
   wire sel_muartstat  = ~|(addr ^ MUARTSTAT);
   wire sel_muartrx    = ~|(addr ^ MUARTRX);
   wire sel_muarttx    = ~|(addr ^ MUARTTX);
   wire sel_bfs       = ~|(addr[11:4] ^ 8'h7D);
   wire sel_ml2stat    = ~|(addr ^ ML2STAT);
-  wire sel_none = ~(sel_mcycle | sel_mcycleh | sel_minstret | sel_minstreth |
-      sel_muartstat | sel_muartrx | sel_muarttx | sel_bfs | sel_ml2stat);
+  wire sel_none = ~(sel_mtvec | sel_mcycle | sel_mcycleh | sel_minstret | sel_minstreth |
+                    sel_muartstat | sel_muartrx | sel_muarttx | sel_bfs | sel_ml2stat);
 
   // read-data mux
-  premux #(32, 8) csr_result_mux (
-      .sel ({sel_mcycle, sel_mcycleh, sel_minstret, sel_minstreth, sel_muartstat, 
-             sel_muarttx, sel_bfs, sel_ml2stat}),
-      .in  ({mcycle, mcycleh, minstret, minstreth, (MUARTSTAT_TXEMPTY | MUARTSTAT_RXEMPTY), 
-            {24'b0, muarttx}, bfs_csr_rdata, {31'b0,l2fifo_l2_req}}),
-      .out (csr_result)
-  );
-
+  premux #(32,9) u_csr_result (
+    .sel({sel_mtvec,
+          sel_mcycle,
+          sel_mcycleh,
+          sel_minstret,
+          sel_minstreth,
+          sel_muartstat,
+          sel_muarttx,
+          sel_bfs,
+          sel_ml2stat}),
+    .in({mtvec_r,2'b0,
+         mcycle,
+         mcycleh,
+         minstret,
+         minstreth,
+         (MUARTSTAT_TXEMPTY | MUARTSTAT_RXEMPTY),
+         24'b0,muarttx,
+         bfs_csr_rdata,
+         31'b0,l2fifo_l2_req}),
+    .out(csr_result));
 
   // write data mux
   wire wen    = |op[1:0] & valid;
@@ -162,9 +186,11 @@ module csr(
   assign csr_error = sel_none | wr_error |
                      (bfs_req_r & (~bfs_csr_valid | bfs_csr_error));
   assign csr_ecause = 0; // TODO
-  assign csr_tvec = 0;
+  assign csr_tvec = mtvec_r;
 
   // CSR latching
+  dff #(30) u_mtvec_r (mtvec_r, wdata[31:2], clk, wen & sel_mtvec);
+
   flop #(32) mcycle_flop (.clk(clk), .set(1'b0), .rst(rst), .enable(1'b1), 
       .d(mcycle_n), .q(mcycle));
   flop #(32) mcycleh_flop (.clk(clk), .set(1'b0), .rst(rst), .enable(1'b1),
