@@ -28,7 +28,7 @@ module tb_top();
     .clk(clk),
     .clk_ref_i(clk_ref_i),
     .sys_clk_i(sys_clk_i),
-    .rst(rst),
+    .rst_in(rst),
     .ddr_addr(ddr_addr),
     .ddr_ba(ddr_ba),
     .ddr_ras_n(ddr_ras_n),
@@ -78,13 +78,13 @@ module tb_top();
   import "DPI-C" task tb_log_lsq_inflight(input bit [15:0] lq_valid, input bit [15:0] sq_valid);
   import "DPI-C" task tb_log_rob_flush();
   import "DPI-C" task tb_mem_read(input bit [31:2] addr, output bit [31:0] rdata);
-  import "DPI-C" task tb_trace_csr_write(input bit [6:0] robid, input bit [11:0] addr, input bit [31:0] data);
-  import "DPI-C" task tb_trace_decode(input bit [6:0] robid, input bit [4:0] rsop, input bit [31:0] insn, input bit [31:0] imm);
+  import "DPI-C" task tb_trace_csr_write(input bit [ROBID_MSB:0] robid, input bit [11:0] addr, input bit [31:0] data);
+  import "DPI-C" task tb_trace_decode(input bit [ROBID_MSB:0] robid, input bit [4:0] rsop, input bit [31:0] insn, input bit [31:0] imm);
   import "DPI-C" task tb_trace_lsq_base(input bit [4:0] lsqid, input bit [31:0] base);
-  import "DPI-C" task tb_trace_lsq_dispatch(input bit [6:0] robid, input bit [4:0] lsqid, input bit [3:0] op, input bit [31:0] base, input bit [31:0] wdata);
+  import "DPI-C" task tb_trace_lsq_dispatch(input bit [ROBID_MSB:0] robid, input bit [4:0] lsqid, input bit [3:0] op, input bit [31:0] base, input bit [31:0] wdata);
   import "DPI-C" task tb_trace_lsq_wdata(input bit [4:0] lsqid, input bit [31:0] wdata);
-  import "DPI-C" task tb_trace_rob_retire(input bit [6:0] robid, input bit [6:0] retop, input bit [31:2] addr, input bit error, input bit mispred, input bit [4:0] ecause, input bit [5:0] rd, input bit [31:0] result);
-  import "DPI-C" task tb_trace_retire_stall(input bit [6:0] robid, input bit empty, input bit executed, input bit [6:0] retop);
+  import "DPI-C" task tb_trace_rob_retire(input bit [ROBID_MSB:0] robid, input bit [6:0] retop, input bit [31:2] addr, input bit error, input bit mispred, input bit [4:0] ecause, input bit [5:0] rd, input bit [31:0] result);
+  import "DPI-C" task tb_trace_retire_stall(input bit [ROBID_MSB:0] robid, input bit empty, input bit executed, input bit [6:0] retop);
   import "DPI-C" task tb_trace_wb_stall(input bit wb_stall_scalu0, input bit wb_stall_scalu1, input bit wb_stall_mcalu0, input bit wb_stall_mcalu1, input bit wb_stall_lsq);
   import "DPI-C" task tb_trace_dcache(input bit dc_req_write, input bit dc_req_hit, input bit dc_req_rd_fwd, input bit dc_req_rd_merge, input bit dc_req_wr_merge, input bit dc_req_alloc_mshr, input bit dc_req_hit_mshr);
   import "DPI-C" task tb_uart_tx(input bit [7:0] c);

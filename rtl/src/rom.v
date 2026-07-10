@@ -47,11 +47,13 @@ module rom(
   wire [31:2] mem_addr;
   assign mem_addr = {rom_bus_addr,bus_cycle_r,1'b0};
 
-  always @(*)
+  always @(*) begin
+    rom_bus_data = '0;
     if(resp_valid_r) begin
       tb_top.tb_mem_read(mem_addr, rom_bus_data[31:0]);
       tb_top.tb_mem_read(mem_addr+1, rom_bus_data[63:32]);
     end
+  end
 
   always @(posedge clk)
     if(rst)

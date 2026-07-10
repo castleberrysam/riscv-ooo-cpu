@@ -13,6 +13,8 @@ module dram_ctl #(
   parameter BUF_ENTRIES = 16,
   parameter CMD_PER_ENT = 4
   )(
+  // Outputs
+  output dramctl_ready,
   /*AUTOINPUT*/
   // Beginning of automatic inputs (from unused autoinst inputs)
   input [31:6]          bus_addr,
@@ -71,6 +73,11 @@ module dram_ctl #(
   localparam RANK_WIDTH = 1;
 
   wire rank;
+
+  wire memc_rst_sync_r;
+  syncr u_memc_rst_sync_r (memc_rst_sync_r, memc_rst, clk, rst);
+
+  assign dramctl_ready = ~rst & ~memc_rst_sync_r & init_calib_complete;
 
   /*AUTOWIRE*/
   // Beginning of automatic wires (for undeclared instantiated-module outputs)

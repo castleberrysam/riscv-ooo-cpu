@@ -1,10 +1,27 @@
 `include "buscmd.vh"
 
 module top(
-  /*AUTOINPUT*/
-  /*AUTOOUTPUT*/
-  /*AUTOINOUT*/
-);
+  input         clk,
+  input         clk_ref_i,
+  input         sys_clk_i,
+  input         rst_in,
+
+  output [13:0] ddr_addr,
+  output [2:0]  ddr_ba,
+  output        ddr_cas_n,
+  output [0:0]  ddr_ck,
+  output [0:0]  ddr_ck_n,
+  output [0:0]  ddr_cke,
+  output [0:0]  ddr_cs_n,
+  output [1:0]  ddr_dm,
+  output [0:0]  ddr_odt,
+  output        ddr_parity,
+  output        ddr_ras_n,
+  output        ddr_reset_n,
+  output        ddr_we_n,
+  inout [15:0]  ddr_dq,
+  inout [1:0]   ddr_dqs,
+  inout [1:0]   ddr_dqs_n);
 
   /*AUTOWIRE*/
 
@@ -29,6 +46,9 @@ module top(
 
   wire        dc_ready;
   wire        dc_rbuf_empty;
+
+  wire        rst;
+  assign rst = rst_in | ~dramctl_ready;
 
   bus bus(
     /*AUTOINST*/);
@@ -110,6 +130,8 @@ module top(
     .BUF_ENTRIES(16),
     .CMD_PER_ENT(4)
   ) u_dram_ctl(
+    // Inputs
+    .rst(rst_in),
     /*AUTOINST*/);
 
   rom rom(
