@@ -152,7 +152,7 @@ static bool have_plusarg(const char* name) {
   size_t len = strlen(name);
   const char* arg = context->commandArgsPlusMatch(name);
   if(arg[0] == '\0') {return false;}
-  if(arg[len+1] != '\0') {return false;}
+  if(arg[len+1] != '\0' && arg[len+1] != '=') {return false;}
   return true;
 }
 
@@ -171,6 +171,20 @@ static const char* get_plusarg_val(const char* name) {
 
   // Return plusarg value
   return arg + (len+2);
+}
+
+// Returns the value of a plusarg of the form +name=integer
+static bool get_plusarg_int(const char* name, long long *val) {
+  int scan_len;
+  uint64_t val_int;
+  const char* val_str = get_plusarg_val(name);
+  if(sscanf(val_str, "%lu%n", &val_int, &scan_len) != 1 ||
+     val_str[scan_len] != '\0') {
+    fprintf(stderr, "ERROR: plusarg value is not an unsigned integer: %s\n", val_str);
+    return false;
+  }
+  *val = val_int;
+  return true;
 }
 
 static FILE* open_argfile(const char* argname, const char* mode,
@@ -360,6 +374,7 @@ int main(int argc, char** argv) {
   // Initialize time vars (must be done before gotos)
   clock_t start = 0;
   clock_t stop = 0;
+  long long stopat = 0;
 
   // Initialize models
   tb_top = new Vtb_top(context);
@@ -387,6 +402,15 @@ int main(int argc, char** argv) {
     dump_next_event = (uint64_t) -1ll;
   }
 
+  // Optional cycle limit
+  if(have_plusarg("stopat")) {
+    if (!get_plusarg_int("stopat", &stopat)) {
+      error = true;
+      goto cleanup;
+    }
+    printf("INFO: Will stop simulation at time %lu\n", stopat);
+  }
+
   // Start timer
   start = clock();
 
@@ -398,7 +422,11 @@ int main(int argc, char** argv) {
   tb_top->tb_top->rst = 0;
 
   // Main sim loop
-  while(!context->gotFinish() && !context->gotError()) {tick();}
+  while(!context->gotFinish() &&
+        !context->gotError() &&
+        (stopat < 1 || clock() < (clock_t) stopat)) {
+    tick();
+  }
 
   stop = clock();
 

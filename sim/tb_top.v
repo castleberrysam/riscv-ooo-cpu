@@ -428,7 +428,7 @@ module tb_top();
   always @(posedge clk) begin
     watchdog = watchdog + 1;
     if(watchdog > 5000) begin
-      $display("\nERROR: 2000 cycles elapsed since last insn retired. Terminating.\n");
+      $display("\nERROR: 5000 cycles elapsed since last insn retired. Terminating.\n");
       $finish;
     end
   end

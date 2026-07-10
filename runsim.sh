@@ -1,13 +1,13 @@
 #!/bin/sh
 
 if [ $# -lt 1 ]; then
-    echo "Usage: runsim.sh <test name>"
+    echo "Usage: runsim.sh <test name> [additional args]"
     exit 1
 fi
 
 DIR=$(dirname $0)
 DIR=$(realpath $DIR)
-TEST=$1
+TEST=$1; shift
 
 DRAMCFG=$DIR/dramsim/DDR4_4Gb_x16_2666_2.ini
 HEXFILE=$DIR/tests/$TEST.hex
@@ -20,11 +20,12 @@ make -C $DIR/tests || exit $?
 make -C $DIR/rtl || exit $?
 
 $DIR/rtl/build/top \
-        --testplusarg dramcfg=$DRAMCFG \
-        --testplusarg memfile=$HEXFILE \
-        --testplusarg tracefile=$TRACEFILE \
-        --testplusarg uartfile=$UARTFILE \
-        --testplusarg logfile=$LOGFILE &
+    +dramcfg=$DRAMCFG \
+    +memfile=$HEXFILE \
+    +tracefile=$TRACEFILE \
+    +uartfile=$UARTFILE \
+    +logfile=$LOGFILE \
+    $@ &
 SIMPID=$!
 
 ERROR=0

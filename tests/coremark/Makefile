@@ -14,7 +14,7 @@
 # 
 # Original Author: Shay Gal-on
 
-TOOL_PREFIX = riscv64-elf
+TOOL_PREFIX = riscv32-none-elf
 AS = $(TOOL_PREFIX)-as
 CC = $(TOOL_PREFIX)-gcc
 CXX = $(TOOL_PREFIX)-g++
