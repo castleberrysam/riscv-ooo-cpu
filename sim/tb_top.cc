@@ -341,6 +341,7 @@ int main(int argc, char** argv) {
   context->commandArgs(argc, argv);
   context->timeunit(-9);
   context->timeprecision(-9);
+  context->fatalOnError(false);
 
   // Initialize ROM
   FILE* romfile = open_argfile("memfile", "r", nullptr);
@@ -397,7 +398,7 @@ int main(int argc, char** argv) {
   tb_top->tb_top->rst = 0;
 
   // Main sim loop
-  while(!context->gotFinish()) {tick();}
+  while(!context->gotFinish() && !context->gotError()) {tick();}
 
   stop = clock();
 

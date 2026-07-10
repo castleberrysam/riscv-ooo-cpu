@@ -43,7 +43,7 @@ volatile ee_s32 seed5_volatile = 0;
        asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \
        __tmp; })
 
-#define CORETIMETYPE               clock_t
+#define CORETIMETYPE               unsigned long
 #define GETMYTIME(_t)              (*_t=read_csr(cycle))
 #define MYTIMEDIFF(fin, ini)       ((fin) - (ini))
 #define EE_TICKS_PER_SEC           100000000 // 100Mhz

@@ -14,20 +14,31 @@
 # 
 # Original Author: Shay Gal-on
 
-TARGET = riscv64-unknown-elf
-AS = $(TARGET)-as
-CC = $(TARGET)-gcc
-CXX = $(TARGET)-g++
-OBJCOPY = $(TARGET)-objcopy
-OBJDUMP = $(TARGET)-objdump
-STRIP = $(TARGET)-strip
+TOOL_PREFIX = riscv64-elf
+AS = $(TOOL_PREFIX)-as
+CC = $(TOOL_PREFIX)-gcc
+CXX = $(TOOL_PREFIX)-g++
+OBJCOPY = $(TOOL_PREFIX)-objcopy
+OBJDUMP = $(TOOL_PREFIX)-objdump
+STRIP = $(TOOL_PREFIX)-strip
+
+# TARGET_ARCH is used by make's implicit rules (yet not documented...)
+TARGET_ARC := rv32im
+TARGET_ABI := ilp32
+TARGET_FLAGS := -march=$(TARGET_ARC)zicsr -mabi=$(TARGET_ABI)
+
+# some prebuilt toolchains do not bundle a C library, so we must use a local build of newlib
+# not sure whether this needs to also use TOOL_PREFIX
+NEWLIB_ROOT := $(realpath ../../newlib/install/riscv64-elf)
+NEWLIB_INCLUDE := $(NEWLIB_ROOT)/include
+NEWLIB_LIB := $(NEWLIB_ROOT)/lib/rv32im/$(TARGET_ABI)
 
 CORE_FILES = core_list_join core_main core_matrix core_state core_util core_portme
 HEADERS = coremark.h
 SRCS = $(addsuffix .c,$(CORE_FILES)) ../startup.S ../stdlib.c
 OBJS = $(addsuffix .o,$(CORE_FILES)) ../startup.o ../stdlib.o
 
-PORT_CFLAGS = -march=rv32im -mabi=ilp32 -mcmodel=medany --static --specs=nano.specs -Wall -O2 -ffunction-sections -fdata-sections -fno-common
+PORT_CFLAGS = $(TARGET_FLAGS) -mcmodel=medany --static -isystem $(NEWLIB_INCLUDE) -L$(NEWLIB_LIB) -Wall -O2 -ffunction-sections -fdata-sections -fno-common
 FLAGS_STR = "$(PORT_CFLAGS) $(XCFLAGS) $(XLFLAGS)"
 CFLAGS = $(PORT_CFLAGS) -I. -DFLAGS_STR=\"$(FLAGS_STR)\"
 

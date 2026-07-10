@@ -1,14 +1,13 @@
 #!/bin/sh
 
 if [ $# -lt 1 ]; then
-    echo "Usage: runsim.sh <test name> <model: rtl/behavioral(default)"
+    echo "Usage: runsim.sh <test name>"
     exit 1
 fi
 
 DIR=$(dirname $0)
 DIR=$(realpath $DIR)
 TEST=$1
-MODEL=${2:-behavioral}
 
 DRAMCFG=$DIR/dramsim/DDR4_4Gb_x16_2666_2.ini
 HEXFILE=$DIR/tests/$TEST.hex
@@ -18,9 +17,9 @@ LOGFILE=$DIR/tests/$TEST.log
 UARTFILE=$DIR/tests/$TEST.out
 
 make -C $DIR/tests || exit $?
-make -C $DIR/$MODEL || exit $?
+make -C $DIR/rtl || exit $?
 
-$DIR/$MODEL/build/top \
+$DIR/rtl/build/top \
         --testplusarg dramcfg=$DRAMCFG \
         --testplusarg memfile=$HEXFILE \
         --testplusarg tracefile=$TRACEFILE \

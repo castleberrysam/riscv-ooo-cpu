@@ -99,11 +99,16 @@ module tb_top();
   assign sys_clk_i = clk;
 
   initial begin
-    $dumpfile("top.vcd");
-    $dumpvars(1, top);
-    $dumpvars(0, top.bus, top.cpu, top.l2, top.rom,
-              top.u_dram_ctl.u_buf, top.u_dram_ctl.u_intf);
-    $dumplimit(64*1024*1024);
+    // $dumpfile("top.vcd");
+    // $dumpvars(1, top);
+    // $dumpvars(0, top.bus, top.cpu, top.l2, top.rom,
+    //           top.u_dram_ctl.u_buf, top.u_dram_ctl.u_intf);
+    // $dumplimit(128*1024*1024);
+    $fstDumpfile("top.fst");
+    $fstDumpvars(1, top);
+    $fstDumpvars(0, top.bus, top.cpu, top.l2, top.rom,
+                 top.u_dram_ctl.u_buf, top.u_dram_ctl.u_intf);
+    $fstDumplimit(128*1024*1024);
 
     clk = 1;
     clk_ref_i = 1;
@@ -497,11 +502,14 @@ module tb_top();
     end
   endtask
 
+  integer trace_cycles = 0;
+  always @(posedge clk)
+    if(!top.rst)
+      trace_cycles = trace_cycles + 1;
+
   integer k;
-  integer trace_cycles;
   task printstats();
     begin
-      trace_cycles = $stime;
       $display("*** SUMMARY STATISTICS ***");
       $display("Cycles elapsed: %0d", trace_cycles);
       $display("Instructions retired: %0d", trace_instret);

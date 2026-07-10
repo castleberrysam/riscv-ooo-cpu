@@ -9,7 +9,7 @@
    http://www.opensource.org/licenses.
 */
 
-#include "newlib.h"
+#include <newlib.h>
 
 #=========================================================================
 # crt0.S : Entry point for RISC-V user programs
