@@ -1,4 +1,8 @@
-old_test/
-*.vcd
 *.gtkw
-*.key
+*.vcd
+*.dis
+*.hex
+*.o
+*.diff
+*.elf
+*.log

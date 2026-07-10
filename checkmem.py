@@ -73,7 +73,11 @@ class MemoryTrace:
                 category = fields[1]
                 if category[0] == "l":
                     # lw/lh/lb/lhu/lbu/lbcmp (read request)
-                    addr = int(fields[2], 16)
+                    try:
+                        addr = int(fields[2], 16)
+                    except ValueError:
+                        print("FAIL checkmem at line {} ({}ns): address contains x/z".format(linenum, time))
+                        return False
                     if category == "lbcmp":
                         op2 = int(fields[3], 16)
                         lsqid = int(fields[4])

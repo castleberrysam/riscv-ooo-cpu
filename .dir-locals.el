@@ -11,7 +11,7 @@
                   (verilog-indent-level-module . 2)
                   (verilog-indent-level-directive . 0)
                   (verilog-case-indent . 2)
-                  (verilog-indent-lists . nil)
+                  (verilog-indent-lists . t)
                   (verilog-cexp-indent . 2)
                   (verilog-auto-endcomments . nil)
                   (verilog-case-fold . nil)

@@ -4,7 +4,7 @@ cd "$(dirname $0)"
 exec emacs -Q --batch --eval="(progn $(tail -n+6 $0))" "$@"
 
 (require 'verilog-mode)
-(dolist (path '("."   "../src" "../src/bfs"))
+(dolist (path '("../src" "../src/bfs"))
   (push path verilog-library-directories))
 (setq verilog-auto-arg-format 'single)
 (setq verilog-auto-inst-param-value t)
