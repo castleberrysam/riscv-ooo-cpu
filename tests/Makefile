@@ -1,4 +1,4 @@
-TOOL_PREFIX := riscv32-none-elf
+TOOL_PREFIX := riscv64-unknown-elf
 AS := $(TOOL_PREFIX)-as
 CC := $(TOOL_PREFIX)-gcc
 CXX := $(TOOL_PREFIX)-g++
@@ -10,15 +10,21 @@ TARGET_ARC := rv32im
 TARGET_ABI := ilp32
 TARGET_FLAGS := -march=$(TARGET_ARC)zicsr -mabi=$(TARGET_ABI)
 
-ASFLAGS := $(TARGET_FLAGS)
-CFLAGS := $(TARGET_FLAGS) -Wall -O2 -ffunction-sections -fdata-sections --specs=nano.specs
+# some prebuilt toolchains do not bundle a C library, so we must use a local build of newlib
+NEWLIB_ROOT ?= /opt/newlib/$(TOOL_PREFIX)
+NEWLIB_INCLUDE := $(NEWLIB_ROOT)/include
+NEWLIB_LIB := $(NEWLIB_ROOT)/lib
+
+ASFLAGS := $(TARGET_FLAGS) -I$(NEWLIB_INCLUDE)
+CFLAGS := $(TARGET_FLAGS) -isystem $(NEWLIB_INCLUDE) -Wall -O2 -ffunction-sections -fdata-sections
 CXXFLAGS := $(CFLAGS)
-LFLAGS := -n $(TARGET_FLAGS) -nostartfiles -Wl,--gc-sections --specs=nano.specs
+LFLAGS := -n $(TARGET_FLAGS) -L$(NEWLIB_LIB) -nostartfiles -Wl,--gc-sections
 
 SRCS_S := $(filter-out startup.s, $(wildcard *.s))
 SRCS_C := $(filter-out stdlib.c, $(wildcard *.c))
 SRCS_CXX := $(wildcard *.cpp)
-OUTS_O := $(SRCS_S:.s=.o) $(SRCS_C:.c=.o) $(SRCS_CXX:.cpp=.o)
+# newlib only provides a C library, not C++, for now C++ must be disabled
+OUTS_O := $(SRCS_S:.s=.o) $(SRCS_C:.c=.o) #$(SRCS_CXX:.cpp=.o)
 OUTS_ELF := $(OUTS_O:.o=.elf) coremark.elf
 OUTS_HEX := $(OUTS_O:.o=.hex) coremark.hex
 OUTS_DIS := $(OUTS_O:.o=.dis) coremark.dis
@@ -28,7 +34,7 @@ OUTS_DIS := $(OUTS_O:.o=.dis) coremark.dis
 all: $(OUTS_O) $(OUTS_ELF) $(OUTS_HEX) $(OUTS_DIS) startup.o stdlib.o
 
 %.elf: %.o startup.o stdlib.o link.ld
-	$(CXX) $(LFLAGS) -Tlink.ld -o $*.elf startup.o $< stdlib.o
+	$(CC) $(LFLAGS) -Tlink.ld -o $*.elf startup.o $< stdlib.o
 coremark.elf: coremark
 	$(MAKE) -C coremark $@
 	rm -f $@

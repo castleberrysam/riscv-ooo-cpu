@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/bash
 
 if [ $# -lt 1 ]; then
     echo "Usage: runtest.sh <test name>"

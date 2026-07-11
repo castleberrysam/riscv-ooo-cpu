@@ -14,7 +14,7 @@
 # 
 # Original Author: Shay Gal-on
 
-TOOL_PREFIX = riscv32-none-elf
+TOOL_PREFIX = riscv64-unknown-elf
 AS = $(TOOL_PREFIX)-as
 CC = $(TOOL_PREFIX)-gcc
 CXX = $(TOOL_PREFIX)-g++
@@ -28,10 +28,9 @@ TARGET_ABI := ilp32
 TARGET_FLAGS := -march=$(TARGET_ARC)zicsr -mabi=$(TARGET_ABI)
 
 # some prebuilt toolchains do not bundle a C library, so we must use a local build of newlib
-# not sure whether this needs to also use TOOL_PREFIX
-NEWLIB_ROOT := $(realpath ../../newlib/install/riscv64-elf)
+NEWLIB_ROOT ?= /opt/newlib/$(TOOL_PREFIX)
 NEWLIB_INCLUDE := $(NEWLIB_ROOT)/include
-NEWLIB_LIB := $(NEWLIB_ROOT)/lib/rv32im/$(TARGET_ABI)
+NEWLIB_LIB := $(NEWLIB_ROOT)/lib
 
 CORE_FILES = core_list_join core_main core_matrix core_state core_util core_portme
 HEADERS = coremark.h

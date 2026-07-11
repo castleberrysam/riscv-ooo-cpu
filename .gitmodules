@@ -1,3 +1,6 @@
 [submodule "dramsim/DRAMsim3"]
 	path = dramsim/DRAMsim3
-	url = git@github.com:Patt-Senior-Design/DRAMsim3
+	url = https://github.com/Patt-Senior-Design/DRAMsim3.git
+[submodule "spike"]
+	path = spike
+	url = https://github.com/Patt-Senior-Design/riscv-isa-sim
