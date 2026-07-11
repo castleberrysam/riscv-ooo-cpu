@@ -53,3 +53,6 @@ RUN mkdir spike/build && \
     make install && \
     cd ../.. && \
     rm -rf spike/build
+
+RUN make -j`nproc` -C tests && \
+    make -j`nproc` -C rtl
