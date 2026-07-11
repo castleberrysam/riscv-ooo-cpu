@@ -1,0 +1,117 @@
+* L1 Cache
+** Invalidation
+The L1 receives invalidate requests from L2. An invalidate request will stall the pipeline if it
+matches an outstanding fill transaction in the MSHR.
+
+* L2 Cache
+** Overview
+Properties of the L2:
+- Associative: The L2 is four-way set associative with a 64B line size (same as L1).
+- Banked: The L2 contains four 32KiB banks for a combined 128KiB capacity.
+- Inclusive: The L2 cache is inclusive of the L1 and must send invalidate requests to L1 when
+  invalidating L2 contents. The L1 may stall these requests.
+- Coherent: The L2 and shared bus implement the MESIF cache coherency protocol.
+- Blocking: Requests may block the L2 pipeline; incoming snoops are processed in a separate
+  non-blocking pipeline.
+- In-order: The L2 can only have one in-flight bus transaction at a time.
+
+** Cache Coherency Protocol
+The L2 implements the MESIF coherency protocol. MESIF is an extension of MESI allowing direct
+cache-to-cache transfers for shared clean data. The F (Forward) state is an extension of the S
+(Shared) state; when a cache line is in this state, the cache directly responds to a snooped read
+request for the line, and inhibits the memory controller. Only the most recent requester of the line
+may have it in the F state, ensuring that there is only one responder for each request. However, it
+is possible for an eviction to result in no cache having the line in the F state, which will cause
+the read to fall back to the memory controller.
+
+#+CAPTION: List of possible states for each cache line.
+| State | Encoding | Description                                                                                                                                                                                          |
+|-------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| M     |      101 | Modified: The line is only resident in this cache, and has been written to.                                                                                                                          |
+| E     |      001 | Exclusive: The line is only resident in this cache, but has not been written to.                                                                                                                     |
+| S     |      010 | Shared: The line may be resident in other caches, and has not been written to.                                                                                                                       |
+| I     |      000 | Invalid: The line is not valid.                                                                                                                                                                      |
+| F     |      011 | Forward: The line may be resident in other caches, and has not been written to. The cache will respond to a BusRd or BusRdX request for the same line. Only one cache may be in state F at any time. |
+
+#+CAPTION: List of transitions between the coherency states.
+| State | Event   | Resulting State | Description                                                           |
+|-------+---------+-----------------+-----------------------------------------------------------------------|
+| M     | Evict   | I               | Cache issues Flush and stalls until it completes.                     |
+| M     | BusRd   | S               | Cache issues Flush.                                                   |
+| M     | BusRdX  | I               | Cache issues Flush.                                                   |
+| M     | BusUpgr | I               | Cache issues Flush. (?)                                               |
+|-------+---------+-----------------+-----------------------------------------------------------------------|
+| E     | Write   | M               |                                                                       |
+| E     | Evict   | I               |                                                                       |
+| E     | BusRd   | S               | Cache issues Flush.                                                   |
+| E     | BusRdX  | I               | Cache issues Flush.                                                   |
+| E     | BusUpgr | I               |                                                                       |
+|-------+---------+-----------------+-----------------------------------------------------------------------|
+| S     | Write   | M               | Cache issues BusUpgr and stalls until it is complete.                 |
+| S     | Evict   | I               |                                                                       |
+| S     | BusRd   | S               | Cache issues Flush. (?)                                               |
+| S     | BusRdX  | I               | Cache issues Flush. (?)                                               |
+| S     | BusUpgr | I               |                                                                       |
+|-------+---------+-----------------+-----------------------------------------------------------------------|
+| I     | Read    | F               | Cache issues BusRd and stalls until it completes.                     |
+| I     | Write   | M               | Cache issues BusRdX (BusUpgr for Wr64) and stalls until it completes. |
+|-------+---------+-----------------+-----------------------------------------------------------------------|
+| F     | Write   | M               | Cache issues BusUpgr and stalls until it is complete.                 |
+| F     | Evict   | I               |                                                                       |
+| F     | BusRd   | S               | Cache issues Flush.                                                   |
+| F     | BusRdX  | I               | Cache issues Flush.                                                   |
+| F     | BusUpgr | I               |                                                                       |
+
+** Interface
+#+CAPTION: List of commands used on the cache interface.
+| Command | Encoding | Description                                                                    |
+|---------+----------+--------------------------------------------------------------------------------|
+| Rd      |       01 | Read 64 bytes of data.                                                         |
+| Wr4     |       10 | Write 4 bytes of data.                                                         |
+| Wr64    |       00 | Write 64 bytes of data.                                                        |
+| Mark    |       11 | Set most significant byte of 64-byte block to 1. Only used by BFS accelerator. |
+
+** Hazards
+- Snoop BusRdX/BusUpgr at same address + BusUpgr in pipeline
+  => Change to BusRdX, except when the command is Wr64
+- Snoop (BusRd: doesn't work?)/BusRdX/BusUpgr at same address + Flush in pipeline
+  => Assert NACK
+- Snoop BusRd/BusRdX/BusUpgr at same address + Sent BusRd/BusRdX waiting for Fill/Flush
+  => Assert NACK
+- Need to send Flush, but snoop pipeline is stalled
+  => Assert NACK
+- Need to invalidate, but L1 cannot accept more invalidations
+  => Assert NACK
+
+* Shared Bus
+All nodes in the system are connected to one shared bus, which serializes the transactions.
+
+Each bus cycle consists of eight clock cycles. A bus cycle can contain a request, a response with
+data, or a response without data. Addresses are always 64-byte aligned, and data is always
+transferred in 64-byte chunks, eight bytes per cycle.
+
+** Interface
+#+CAPTION: List of signals used on the shared bus.
+| Signal | Width | Description                                                                                  |
+|--------+-------+----------------------------------------------------------------------------------------------|
+| valid  |     1 | Indicates whether other fields are valid.                                                    |
+| hit    |     1 | Asserted by snoopees to inhibit response from DRAM controller.                               |
+| nack   |     1 | Asserted by snoopees to force retry of a request.                                            |
+| cmd    |     3 | Bus command (see list below).                                                                |
+| tag    |     5 | Tag value assigned by requesting node, to distinguish between multiple outstanding requests. |
+| addr   |    26 | Bits [31:6] of the physical address.                                                         |
+| data   |    64 | Data for current bus phit. (Fill and Flush only)                                             |
+
+#+CAPTION: List of commands used on the shared bus.
+| Command | Encoding | Description                                                                   |
+|---------+----------+-------------------------------------------------------------------------------|
+| BusRd   |      000 | Read data at specified address. The data may be shared with other caches.     |
+| BusRdX  |      001 | Read data at specified address. The data may not be shared with other caches. |
+| BusUpgr |      010 | Instructs other caches to invalidate any data at specified address.           |
+| Fill    |      100 | Response with data from memory controller to fulfill BusRd or BusRdX.         |
+| Flush   |      101 | Writeback with data from cache due to eviction or to fulfill BusRd or BusRdX. |
+
+** Arbitration
+When multiple nodes are requesting use of the shared bus, responses (Fill, Flush) are given higher
+priority than requests (BusRd, BusRdX, BusUpgr). Within each priority level, a round-robin
+arbitration scheme is applied.
