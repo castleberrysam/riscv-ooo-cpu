@@ -36,7 +36,7 @@ RUN curl -LO ftp://sourceware.org/pub/newlib/newlib-4.6.0.20260123.tar.gz && \
     ../configure --prefix=/opt/newlib --target=riscv64-unknown-elf --disable-multilib CFLAGS_FOR_TARGET='-march=rv32im -mabi=ilp32' && \
     make -j`nproc` && \
     make install && \
-    cd .. && \
+    cd ../.. && \
     rm -rf newlib-4.6.0.20260123*
 
 COPY . riscv-ooo-cpu
