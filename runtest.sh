@@ -15,8 +15,8 @@ Options:
   --all (-a)
     Run all tests and print a summary table showing which tests passed/failed.
 
-  --dump (-d)
-    Enable waveform dumping (output file is named top.fst).
+  --dump (-d) [fst file name]
+    Enable waveform dumping. If no file name is given, the default is tests/<test>.fst.
 
   --dumpranges (-r) <N+N,N+N,...>
     Specify one or more time ranges to dump using 'base+len' notation.
@@ -39,7 +39,7 @@ function list_tests {
 # Note that we use "$@" to let each command-line parameter expand to a
 # separate word. The quotes around "$@" are essential!
 # We need TEMP as the 'eval set --' would nuke the return value of getopt.
-temp=$(getopt -o 'ladr:s:' --long 'list,all,dump,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
+temp=$(getopt -o 'lad::r:s:' --long 'list,all,dump::,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -47,6 +47,8 @@ fi
 eval set -- "$temp"
 unset temp
 
+dump=0
+dumpfile=
 plusargs=
 run_rtl=1
 run_spike=1
@@ -60,8 +62,11 @@ while true; do
             run_all_tests=1
             shift;;
 	'-d'|'--dump')
-	    plusargs="$plusargs +dumpon"
-	    shift;;
+            dump=1
+            if [ -n "$2" ]; then
+                dumpfile=$2
+            fi
+	    shift 2;;
 	'-r'|'--dumpranges')
             plusargs="$plusargs +dumpranges=$2"
 	    shift 2;;
@@ -113,21 +118,23 @@ function runspike {
 }
 
 function run_test {
-    test=$1
-    plusargs=$2
+    local test=$1
+    local dump=$2
+    local dumpfile=$3
+    local plusargs=$4
 
     if [ $run_spike -ne 0 ]; then
-        make -C $dir/tests $test.elf || return 1
+        make -j$(nproc) -C $dir/tests $test.elf || return 1
     fi
     if [ $run_rtl -ne 0 ]; then
-        make -C $dir/tests $test.hex || return 1
-        make -C $dir/rtl || return 1
+        make -j$(nproc) -C $dir/tests $test.hex || return 1
+        make -j$(nproc) -C $dir/rtl || return 1
     fi
 
     rm -f $dir/simtrace
 
-    simpid=
-    simstatus=
+    local simpid=
+    local simstatus=
     if [ $run_rtl -ne 0 ]; then
         plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
         plusargs="$plusargs +memfile=$dir/tests/$test.hex"
@@ -136,11 +143,18 @@ function run_test {
 
         if [ $run_spike -ne 0 ]; then
             mkfifo $dir/simtrace
-            tracefile=$dir/simtrace
+            local tracefile=$dir/simtrace
         else
-            tracefile=$dir/tests/$test.trace
+            local tracefile=$dir/tests/$test.trace
         fi
         plusargs="$plusargs +tracefile=$tracefile"
+
+        if [ $dump -ne 0 ]; then
+            if [ -z "$dumpfile" ]; then
+                dumpfile=$dir/tests/$test.fst
+            fi
+            plusargs="$plusargs +dumpon=$dumpfile"
+        fi
 
         $dir/rtl/build/top $plusargs &
         simpid=$!
@@ -148,10 +162,10 @@ function run_test {
         simstatus=0
     fi
 
-    spikepid=
-    spikestatus=
+    local spikepid=
+    local spikestatus=
     if [ $run_spike -ne 0 ]; then
-        spike_args=$dir/tests/$test.elf
+        local spike_args=$dir/tests/$test.elf
         if [ $run_rtl -ne 0 ]; then
             spike_args="--cosim=$dir/simtrace $spike_args"
         fi
@@ -163,8 +177,9 @@ function run_test {
     fi
 
     until [ -n "$simstatus" ] && [ -n "$spikestatus" ]; do
+        local pid=
         wait -n -p pid $simpid $spikepid
-        status=$?
+        local status=$?
         case $pid in
             $simpid) simstatus=$status; simpid=;;
             $spikepid) spikestatus=$status; spikepid=;;
@@ -200,12 +215,12 @@ function run_test {
 eval set -- $tests
 if [ $# -eq 1 ]; then
     # Single test mode
-    run_test $1 $plusargs
+    run_test $1 $dump "$dumpfile" $plusargs
 else
     # Summary table mode
     for test; do
         printf "%-16s" $test
-        run_test $test $plusargs >/dev/null 2>&1
+        run_test $test $dump "$dumpfile" $plusargs >/dev/null 2>&1
         if [ $? -eq 0 ]; then
             echo "passed"
         else

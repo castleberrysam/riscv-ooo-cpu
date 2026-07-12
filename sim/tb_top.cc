@@ -392,7 +392,13 @@ int main(int argc, char** argv) {
     dumper->set_time_unit("1ps");
     dumper->set_time_resolution("1ps");
     tb_top->trace(dumper, 128); // 128 levels of hierarchy
-    dumper->open("top.fst");
+
+    const char *dumpfile = get_plusarg_val("dumpon");
+    if (dumpfile == NULL || dumpfile[0] == '\0') {
+      dumpfile = "top.fst";
+    }
+    dumper->open(dumpfile);
+
     if(!init_dump_ranges()) {
       error = true;
       goto cleanup;
