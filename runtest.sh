@@ -20,8 +20,11 @@ Options:
   --stopat (-s) <N>
     Stop the simulation at the specified time.
 
-  --disable-cosim
-    Do not run spike or perform any instruction trace checking.
+  --only-rtl
+    Only run RTL simulation and disable instruction trace checking.
+
+  --only-spike
+    Only run spike simulation and disable instruction trace checking.
 EOF
 }
 
@@ -32,7 +35,7 @@ function list_tests {
 # Note that we use "$@" to let each command-line parameter expand to a
 # separate word. The quotes around "$@" are essential!
 # We need TEMP as the 'eval set --' would nuke the return value of getopt.
-temp=$(getopt -o 'ldr:s:' --long 'list,dump,dumpranges:,stopat:,disable-cosim' -n 'runtest.sh' -- "$@")
+temp=$(getopt -o 'ldr:s:' --long 'list,dump,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -41,7 +44,8 @@ eval set -- "$temp"
 unset temp
 
 plusargs=
-cosim=1
+run_rtl=1
+run_spike=1
 while true; do
     case "$1" in
         '-l'|'--list')
@@ -56,8 +60,11 @@ while true; do
 	'-s'|'--stopat')
             plusargs="$plusargs +stopat=$2"
 	    shift 2;;
-        '--disable-cosim')
-            cosim=0
+        '--only-rtl')
+            run_spike=0
+            shift;;
+        '--only-spike')
+            run_rtl=0
             shift;;
 	'--')
 	    shift
@@ -68,41 +75,66 @@ while true; do
     esac
 done
 
+if [ $run_rtl -eq 0 ] && [ $run_spike -eq 0 ]; then
+    echo "ERROR: nothing left to do"
+    exit 1
+fi
+
 if [ $# -ne 1 ]; then
     usage
     exit 1
 fi
 test=$1
 
-make -C $dir/tests || exit $?
-make -C $dir/rtl || exit $?
+if [ $run_spike -ne 0 ]; then
+    make -C $dir/tests $test.elf || exit $?
+fi
+if [ $run_rtl -ne 0 ]; then
+    make -C $dir/tests $test.hex || exit $?
+    make -C $dir/rtl || exit $?
+fi
 
 rm -f $dir/simtrace
-mkfifo $dir/simtrace
 
-plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
-plusargs="$plusargs +memfile=$dir/tests/$test.hex"
-plusargs="$plusargs +uartfile=$dir/tests/$test.out"
-plusargs="$plusargs +logfile=$dir/tests/$test.log"
+simpid=
+simstatus=
+if [ $run_rtl -ne 0 ]; then
+    plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
+    plusargs="$plusargs +memfile=$dir/tests/$test.hex"
+    plusargs="$plusargs +uartfile=$dir/tests/$test.out"
+    plusargs="$plusargs +logfile=$dir/tests/$test.log"
 
-if [ $cosim -ne 0 ]; then
-    tracefile=$dir/simtrace
+    if [ $run_spike -ne 0 ]; then
+        mkfifo $dir/simtrace
+        tracefile=$dir/simtrace
+    else
+        tracefile=$dir/tests/$test.trace
+    fi
+    plusargs="$plusargs +tracefile=$tracefile"
+
+    $dir/rtl/build/top $plusargs &
+    simpid=$!
 else
-    tracefile=$dir/tests/$test.trace
+    simstatus=0
 fi
-plusargs="$plusargs +tracefile=$tracefile"
 
-$dir/rtl/build/top $plusargs &
-simpid=$!
+function runspike {
+    spike --isa=RV32IM \
+          -m0x10000000:0x1000000,0x20000000:0x8000000,0x30000000:0x1000 \
+          --extension=hashset \
+          --csrmask=cycle,cycleh,instret,instreth,mbfsstat,mbfsroot,mbfstarg,mbfsqbase,mbfsqsize,mbfsresult,mcycle,minstret,mcycleh,minstreth,ml2stat \
+          "$@"
+}
 
 spikepid=
 spikestatus=
-if [ $cosim -ne 0 ]; then
-    $dir/runspike.sh \
-        --log-commits \
-        --cosim=$dir/simtrace \
-        $dir/tests/$test.elf \
-        2>/dev/null &
+if [ $run_spike -ne 0 ]; then
+    spike_args=$dir/tests/$test.elf
+    if [ $run_rtl -ne 0 ]; then
+        spike_args="--cosim=$dir/simtrace $spike_args"
+    fi
+
+    runspike $spike_args &
     spikepid=$!
 else
     spikestatus=0
@@ -114,7 +146,6 @@ function fail {
     exit 1
 }
 
-simstatus=
 until [ -n "$simstatus" ] && [ -n "$spikestatus" ]; do
     wait -n -p pid $simpid $spikepid
     status=$?
@@ -141,9 +172,9 @@ if [ -z "$simstatus" ] || [ -z "$spikestatus" ]; then
     fail
 fi
 
-$dir/checkmem.py $dir/tests/$test.log
-if [ $? -ne 0 ]; then
-    fail
+if [ $run_rtl -ne 0 ]; then
+    $dir/checkmem.py $dir/tests/$test.log
+    if [ $? -ne 0 ]; then fail; fi
 fi
 
 rm -f $dir/simtrace
