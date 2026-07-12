@@ -5,11 +5,15 @@ dir=$(realpath $dir)
 
 function usage {
     cat <<EOF
-Usage: runtest.sh [options] <test name>
+Usage: runtest.sh [options] <test name>...
+       runtest.sh [options] --all
 
 Options:
   --list (-l)
     List the available tests.
+
+  --all (-a)
+    Run all tests and print a summary table showing which tests passed/failed.
 
   --dump (-d)
     Enable waveform dumping (output file is named top.fst).
@@ -35,7 +39,7 @@ function list_tests {
 # Note that we use "$@" to let each command-line parameter expand to a
 # separate word. The quotes around "$@" are essential!
 # We need TEMP as the 'eval set --' would nuke the return value of getopt.
-temp=$(getopt -o 'ldr:s:' --long 'list,dump,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
+temp=$(getopt -o 'ladr:s:' --long 'list,all,dump,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -46,11 +50,15 @@ unset temp
 plusargs=
 run_rtl=1
 run_spike=1
+run_all_tests=0
 while true; do
     case "$1" in
         '-l'|'--list')
             list_tests
             exit 0;;
+        '-a'|'--all')
+            run_all_tests=1
+            shift;;
 	'-d'|'--dump')
 	    plusargs="$plusargs +dumpon"
 	    shift;;
@@ -80,42 +88,20 @@ if [ $run_rtl -eq 0 ] && [ $run_spike -eq 0 ]; then
     exit 1
 fi
 
-if [ $# -ne 1 ]; then
-    usage
-    exit 1
-fi
-test=$1
-
-if [ $run_spike -ne 0 ]; then
-    make -C $dir/tests $test.elf || exit $?
-fi
-if [ $run_rtl -ne 0 ]; then
-    make -C $dir/tests $test.hex || exit $?
-    make -C $dir/rtl || exit $?
-fi
-
-rm -f $dir/simtrace
-
-simpid=
-simstatus=
-if [ $run_rtl -ne 0 ]; then
-    plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
-    plusargs="$plusargs +memfile=$dir/tests/$test.hex"
-    plusargs="$plusargs +uartfile=$dir/tests/$test.out"
-    plusargs="$plusargs +logfile=$dir/tests/$test.log"
-
-    if [ $run_spike -ne 0 ]; then
-        mkfifo $dir/simtrace
-        tracefile=$dir/simtrace
-    else
-        tracefile=$dir/tests/$test.trace
+if [ $# -eq 0 ]; then
+    if [ $run_all_tests -eq 0 ]; then
+        echo "ERROR: no tests specified"
+        usage
+        exit 1
     fi
-    plusargs="$plusargs +tracefile=$tracefile"
-
-    $dir/rtl/build/top $plusargs &
-    simpid=$!
+    tests=$(list_tests)
 else
-    simstatus=0
+    if [ $run_all_tests -ne 0 ]; then
+        echo "ERROR: cannot specify test names with --all option"
+        usage
+        exit 1
+    fi
+    tests=$@
 fi
 
 function runspike {
@@ -126,56 +112,104 @@ function runspike {
           "$@"
 }
 
-spikepid=
-spikestatus=
-if [ $run_spike -ne 0 ]; then
-    spike_args=$dir/tests/$test.elf
+function run_test {
+    test=$1
+    plusargs=$2
+
+    if [ $run_spike -ne 0 ]; then
+        make -C $dir/tests $test.elf || return 1
+    fi
     if [ $run_rtl -ne 0 ]; then
-        spike_args="--cosim=$dir/simtrace $spike_args"
+        make -C $dir/tests $test.hex || return 1
+        make -C $dir/rtl || return 1
     fi
 
-    runspike $spike_args &
-    spikepid=$!
-else
-    spikestatus=0
-fi
-
-function fail {
-    echo "TEST FAILED"
     rm -f $dir/simtrace
-    exit 1
+
+    simpid=
+    simstatus=
+    if [ $run_rtl -ne 0 ]; then
+        plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
+        plusargs="$plusargs +memfile=$dir/tests/$test.hex"
+        plusargs="$plusargs +uartfile=$dir/tests/$test.out"
+        plusargs="$plusargs +logfile=$dir/tests/$test.log"
+
+        if [ $run_spike -ne 0 ]; then
+            mkfifo $dir/simtrace
+            tracefile=$dir/simtrace
+        else
+            tracefile=$dir/tests/$test.trace
+        fi
+        plusargs="$plusargs +tracefile=$tracefile"
+
+        $dir/rtl/build/top $plusargs &
+        simpid=$!
+    else
+        simstatus=0
+    fi
+
+    spikepid=
+    spikestatus=
+    if [ $run_spike -ne 0 ]; then
+        spike_args=$dir/tests/$test.elf
+        if [ $run_rtl -ne 0 ]; then
+            spike_args="--cosim=$dir/simtrace $spike_args"
+        fi
+
+        runspike $spike_args &
+        spikepid=$!
+    else
+        spikestatus=0
+    fi
+
+    until [ -n "$simstatus" ] && [ -n "$spikestatus" ]; do
+        wait -n -p pid $simpid $spikepid
+        status=$?
+        case $pid in
+            $simpid) simstatus=$status; simpid=;;
+            $spikepid) spikestatus=$status; spikepid=;;
+            *) echo "ERROR: unexpected return value from wait: $pid"; return 1;;
+        esac
+        if [ $status -ne 0 ]; then break; fi
+    done
+
+    if [ -n "$simstatus" ] && [ $simstatus -ne 0 ]; then
+        echo "ERROR: rtl returned non-zero status: $simstatus"
+        return 1
+    fi
+
+    if [ -n "$spikestatus" ] && [ $spikestatus -ne 0 ]; then
+        echo "ERROR: spike returned non-zero status: $spikestatus"
+        return 1
+    fi
+
+    if [ -z "$simstatus" ] || [ -z "$spikestatus" ]; then
+        echo "ERROR: missing return status from rtl or spike"
+        return 1
+    fi
+
+    if [ $run_rtl -ne 0 ]; then
+        $dir/checkmem.py $dir/tests/$test.log
+        if [ $? -ne 0 ]; then return 1; fi
+    fi
+
+    rm -f $dir/simtrace
+    return 0
 }
 
-until [ -n "$simstatus" ] && [ -n "$spikestatus" ]; do
-    wait -n -p pid $simpid $spikepid
-    status=$?
-    case $pid in
-        $simpid) simstatus=$status; simpid=;;
-        $spikepid) spikestatus=$status; spikepid=;;
-        *) echo "error: unexpected return value from wait: $pid"; fail;;
-    esac
-    if [ $status -ne 0 ]; then break; fi
-done
-
-if [ -n "$simstatus" ] && [ $simstatus -ne 0 ]; then
-    echo "ERROR: rtl returned non-zero status: $simstatus"
-    fail
+eval set -- $tests
+if [ $# -eq 1 ]; then
+    # Single test mode
+    run_test $1 $plusargs
+else
+    # Summary table mode
+    for test; do
+        printf "%-16s" $test
+        run_test $test $plusargs >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "passed"
+        else
+            echo "failed"
+        fi
+    done
 fi
-
-if [ -n "$spikestatus" ] && [ $spikestatus -ne 0 ]; then
-    echo "ERROR: spike returned non-zero status: $spikestatus"
-    fail
-fi
-
-if [ -z "$simstatus" ] || [ -z "$spikestatus" ]; then
-    echo "ERROR: missing return status from rtl or spike"
-    fail
-fi
-
-if [ $run_rtl -ne 0 ]; then
-    $dir/checkmem.py $dir/tests/$test.log
-    if [ $? -ne 0 ]; then fail; fi
-fi
-
-rm -f $dir/simtrace
-exit 0
