@@ -107,6 +107,8 @@ typedef struct {
 static rob_trace_t rob_trace[ROB_SIZE];
 static lsq_trace_t lsq_trace[LSQ_SIZE];
 
+static int watchdog;
+
 static struct {
   unsigned instret;
   unsigned branches;
@@ -443,6 +445,11 @@ int main(int argc, char** argv) {
         !context->gotError() &&
         (stopat < 1 || clock() < (clock_t) stopat)) {
     tick();
+    if (watchdog++ >= 5000) {
+      fprintf(stderr, "\nERROR: 5000 cycles elapsed since last insn retired. Terminating.\n");
+      error = true;
+      context->gotFinish(true);
+    }
   }
 
   stop = clock();
@@ -772,6 +779,9 @@ int tb_trace_rob_retire(const svBitVecVal* robid, const svBitVecVal* retop,
     return_code = rob_entry.memdata >> 1;
     context->gotFinish(true);
   }
+
+  // Clear hang watchdog timer
+  watchdog = 0;
 
   return 0;
 }
