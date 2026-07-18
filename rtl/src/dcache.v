@@ -432,7 +432,7 @@ module dcache(
   // fill_*
   always @(*) begin
     fill_wen = rbuf_head != rbuf_tail;
-    fill_done = fill_wen & (&rbuf_head[2:0]);
+    fill_done = (~s0_wen | s0_stall) & fill_wen & (&rbuf_head[2:0]);
     fill_index = {addr2set({mshr_addr,4'b0}),oh2idx(mshr_way),rbuf_head[2:0]};
 
     fill_data = rbuf_data[rbuf_head[2:0]];
