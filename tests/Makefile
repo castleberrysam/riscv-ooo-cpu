@@ -63,4 +63,4 @@ zlib.elf: zlib.o pg1342.o startup.o stdlib.o link.ld zlib/build/libz.a
 	$(OBJDUMP) -d -Mnumeric -Mno-aliases $< > $@
 
 clean:
-	@rm -f *.elf *.hex *.xxd *.o *.bin *.diff *.dis *.log
+	@rm -f *.elf *.hex *.xxd *.o *.bin *.diff *.dis *.log *.stdout *.out

@@ -166,7 +166,9 @@ function run_test {
             plusargs="$plusargs +dumpon=$dumpfile"
         fi
 
-        $dir/rtl/build/top $plusargs &
+        rm -f $dir/tests/$test.{out,log,fsdb,stdout}
+
+        $dir/rtl/build/top $plusargs | tee $dir/tests/$test.stdout &
         simpid=$!
     else
         simstatus=0
@@ -186,6 +188,7 @@ function run_test {
         spikestatus=0
     fi
 
+    local error=0
     until [ -n "$simstatus" ] && [ -n "$spikestatus" ]; do
         local pid=
         wait -n -p pid $simpid $spikepid
@@ -195,31 +198,47 @@ function run_test {
             $spikepid) spikestatus=$status; spikepid=;;
             *) echo "ERROR: unexpected return value from wait: $pid"; return 1;;
         esac
-        if [ $status -ne 0 ]; then break; fi
+        if [ $status -ne 0 ]; then error=1; fi
     done
 
     if [ -n "$simstatus" ] && [ $simstatus -ne 0 ]; then
         echo "ERROR: rtl returned non-zero status: $simstatus"
-        return 1
+        error=1
     fi
 
     if [ -n "$spikestatus" ] && [ $spikestatus -ne 0 ]; then
         echo "ERROR: spike returned non-zero status: $spikestatus"
-        return 1
+        error=1
     fi
 
     if [ -z "$simstatus" ] || [ -z "$spikestatus" ]; then
         echo "ERROR: missing return status from rtl or spike"
-        return 1
+        error=1
     fi
 
     if [ $run_rtl -ne 0 ] && [ -r $dir/tests/$test.log ]; then
         $dir/checkmem.py $dir/tests/$test.log
-        if [ $? -ne 0 ]; then return 1; fi
+        if [ $? -ne 0 ]; then error=1; fi
     fi
 
     rm -f $dir/simtrace
-    return 0
+    return $error
+}
+
+function get_test_stats {
+    local test=$1
+
+    local statfile=$dir/tests/$test.stdout
+    local cycles=
+    local cpi=
+    if [ -r $statfile ]; then
+        cycles=$(sed -nr 's/^Cycles elapsed: ([0-9]+)$/\1/p' $statfile)
+        cpi=$(sed -nr 's/^Average CPI: ([0-9.]+)$/\1/p' $statfile)
+    fi
+    if [ -z "$cycles" ]; then cycles=???; fi
+    if [ -z "$cpi" ]; then cpi=???; fi
+
+    echo -n "$cycles cycles $cpi cpi"
 }
 
 eval set -- $tests
@@ -230,11 +249,13 @@ else
     # Summary table mode
     for test; do
         printf "%-16s" $test
+
+        # Run the test
         run_test $test $dump "$dumpfile" $plusargs >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            echo "passed"
-        else
+        if [ $? -ne 0 ]; then
             echo "failed"
         fi
+
+        printf "passed ($(get_test_stats $test))\n"
     done
 fi
