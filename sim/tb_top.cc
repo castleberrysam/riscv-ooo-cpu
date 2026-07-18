@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <time.h>
 
-#define ROB_SIZE 128
+#define ROB_SIZE 32
 #define LQ_SIZE 16
 #define SQ_SIZE 16
 #define LSQ_SIZE (LQ_SIZE+SQ_SIZE)
@@ -257,6 +257,26 @@ static bool init_dump_ranges() {
   return true;
 }
 
+static void print_histogram(unsigned *buckets, unsigned num_buckets, unsigned max_width) {
+  // Find the maximum value
+  unsigned max = 0;
+  for(unsigned i = 0; i < num_buckets; i++) {if(buckets[i] > max) max = buckets[i];}
+
+  if(num_buckets == 0 || max == 0) {
+    printf("(no data)\n");
+    return;
+  }
+
+  // Scale the maximum value to the max width
+  for(unsigned i = 0; i < num_buckets; i++) {
+    unsigned width = (unsigned) (max_width * (((double) buckets[i]) / max));
+
+    printf("%3d: ", i);
+    for(unsigned i = 0; i < width; i++) {putchar('*');}
+    putchar('\n');
+  }
+}
+
 static void print_stats() {
   puts("*** SUMMARY STATISTICS ***");
   printf("Cycles elapsed: %ld\n", context->time());
@@ -265,20 +285,14 @@ static void print_stats() {
   printf("Branch prediction accuracy: %.2f\n",
          1.0 - (((double) stats.mispreds) / stats.branches));
 
-  fputs("ROB occupancy histogram: ", stdout);
-  for(int i = 0; i < ROB_SIZE+1; i++)
-    printf("%d,", stats.rob_inflight_hist[i]);
-  putchar('\n');
+  fputs("ROB occupancy histogram:\n", stdout);
+  print_histogram(stats.rob_inflight_hist, ROB_SIZE+1, 80);
 
-  fputs("LQ occupancy histogram: ", stdout);
-  for(int i = 0; i < LQ_SIZE+1; i++)
-    printf("%d,", stats.lq_inflight_hist[i]);
-  putchar('\n');
+  fputs("LQ occupancy histogram:\n", stdout);
+  print_histogram(stats.lq_inflight_hist, LQ_SIZE+1, 80);
 
-  fputs("SQ occupancy histogram: ", stdout);
-  for(int i = 0; i < SQ_SIZE+1; i++)
-    printf("%d,", stats.sq_inflight_hist[i]);
-  putchar('\n');
+  fputs("SQ occupancy histogram:\n", stdout);
+  print_histogram(stats.sq_inflight_hist, SQ_SIZE+1, 80);
 
   printf("RETIRE_STALL_EMPTY:  %d\n", stats.retire_stall_empty);
   printf("RETIRE_STALL_BRANCH: %d\n", stats.retire_stall_branch);
