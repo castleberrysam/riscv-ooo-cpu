@@ -490,7 +490,8 @@ int main(int argc, char** argv) {
   delete tb_top;
   delete dumper;
   delete context;
-  return error ? 1 : 0;
+
+  return error ? 1 : return_code;
 }
 
 // DPI functions
