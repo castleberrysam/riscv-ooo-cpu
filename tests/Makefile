@@ -2,6 +2,7 @@ TOOL_PREFIX := riscv64-unknown-elf
 AS := $(TOOL_PREFIX)-as
 CC := $(TOOL_PREFIX)-gcc
 CXX := $(TOOL_PREFIX)-g++
+LD := $(TOOL_PREFIX)-ld
 OBJCOPY := $(TOOL_PREFIX)-objcopy
 OBJDUMP := $(TOOL_PREFIX)-objdump
 
@@ -18,7 +19,7 @@ NEWLIB_LIB := $(NEWLIB_ROOT)/lib
 ASFLAGS := $(TARGET_FLAGS) -I$(NEWLIB_INCLUDE)
 CFLAGS := $(TARGET_FLAGS) -isystem $(NEWLIB_INCLUDE) -Wall -O2 -ffunction-sections -fdata-sections
 CXXFLAGS := $(CFLAGS)
-LFLAGS := -n $(TARGET_FLAGS) -L$(NEWLIB_LIB) -nostartfiles -Wl,--gc-sections
+LFLAGS := -n $(TARGET_FLAGS) -L$(NEWLIB_LIB) -nostdlib -nostartfiles -Wl,--gc-sections
 
 SRCS_S := $(filter-out startup.s, $(wildcard *.s))
 SRCS_C := $(filter-out stdlib.c, $(wildcard *.c))
@@ -34,11 +35,20 @@ OUTS_DIS := $(OUTS_O:.o=.dis) coremark.dis
 all: $(OUTS_O) $(OUTS_ELF) $(OUTS_HEX) $(OUTS_DIS) startup.o stdlib.o
 
 %.elf: %.o startup.o stdlib.o link.ld
-	$(CC) $(LFLAGS) -Tlink.ld -o $*.elf startup.o $< stdlib.o
+	$(CC) $(LFLAGS) -Tlink.ld -o $*.elf startup.o $< stdlib.o -lc -lm -lnosys -lgcc
 coremark.elf: coremark
 	$(MAKE) -C coremark $@
 	rm -f $@
 	ln coremark/$@ $@
+
+zlib/build/libz.a:
+	./build-zlib.sh
+zlib.o: zlib.c
+	$(CC) -c $(CFLAGS) -Izlib -o zlib.o zlib.c
+pg1342.o: pg1342.txt
+	$(LD) -m elf32lriscv -r -b binary -o pg1342.o pg1342.txt
+zlib.elf: zlib.o pg1342.o startup.o stdlib.o link.ld zlib/build/libz.a
+	$(CC) $(LFLAGS) -Tlink.ld -o zlib.elf zlib.o pg1342.o startup.o stdlib.o -Lzlib/build -lc -lz
 
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@

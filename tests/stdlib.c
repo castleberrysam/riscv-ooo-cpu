@@ -44,6 +44,10 @@ ssize_t _write(int fd, void *buf, size_t count) {
     return count;
 }
 
+int _isatty(int fd) {
+    return 1;
+}
+
 // Memory allocation
 void * _sbrk(intptr_t increment) {
     uint8_t *newbrk = curbrk + increment;

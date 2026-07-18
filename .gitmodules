@@ -4,3 +4,6 @@
 [submodule "spike"]
 	path = spike
 	url = https://github.com/Patt-Senior-Design/riscv-isa-sim
+[submodule "tests/zlib"]
+	path = tests/zlib
+	url = git@github.com:madler/zlib
