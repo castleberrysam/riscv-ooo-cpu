@@ -467,9 +467,8 @@ int main(int argc, char** argv) {
   }
 
   stop = clock();
-
   tb_top->final();
-  if(dumper) {dumper->close();}
+
   print_stats();
 
   if(start != (clock_t) -1 && stop != (clock_t) -1) {
@@ -480,6 +479,13 @@ int main(int argc, char** argv) {
   printf("Application return code: %d\n", return_code);
 
  cleanup:
+  if(dumper) {dumper->close();}
+  fflush(stdout);
+  fflush(stderr);
+  if(uartfile != nullptr && uartfile != stdout) {fclose(uartfile);}
+  if(tracefile != nullptr) {fclose(tracefile);}
+  if(logfile != nullptr) {fclose(logfile);}
+
   delete dram;
   delete tb_top;
   delete dumper;
