@@ -29,6 +29,10 @@ Options:
 
   --only-spike
     Only run spike simulation and disable instruction trace checking.
+
+  --no-log (-n)
+    Disable log file generation. This is useful as the log file can grow large for long tests.
+    This also disables memcheck since it parses the log file.
 EOF
 }
 
@@ -39,7 +43,7 @@ function list_tests {
 # Note that we use "$@" to let each command-line parameter expand to a
 # separate word. The quotes around "$@" are essential!
 # We need TEMP as the 'eval set --' would nuke the return value of getopt.
-temp=$(getopt -o 'lad::r:s:' --long 'list,all,dump::,dumpranges:,stopat:,only-rtl,only-spike' -n 'runtest.sh' -- "$@")
+temp=$(getopt -o 'lad::r:s:n' --long 'list,all,dump::,dumpranges:,stopat:,only-rtl,only-spike,no-log' -n 'runtest.sh' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -53,6 +57,7 @@ plusargs=
 run_rtl=1
 run_spike=1
 run_all_tests=0
+enable_log=1
 while true; do
     case "$1" in
         '-l'|'--list')
@@ -78,6 +83,9 @@ while true; do
             shift;;
         '--only-spike')
             run_rtl=0
+            shift;;
+        '-n'|'--no-log')
+            enable_log=0
             shift;;
 	'--')
 	    shift
@@ -139,7 +147,9 @@ function run_test {
         plusargs="$plusargs +dramcfg=$dir/dramsim/DDR4_4Gb_x16_2666_2.ini"
         plusargs="$plusargs +memfile=$dir/tests/$test.hex"
         plusargs="$plusargs +uartfile=$dir/tests/$test.out"
-        plusargs="$plusargs +logfile=$dir/tests/$test.log"
+        if [ $enable_log -ne 0 ]; then
+            plusargs="$plusargs +logfile=$dir/tests/$test.log"
+        fi
 
         if [ $run_spike -ne 0 ]; then
             mkfifo $dir/simtrace
@@ -203,7 +213,7 @@ function run_test {
         return 1
     fi
 
-    if [ $run_rtl -ne 0 ]; then
+    if [ $run_rtl -ne 0 ] && [ -r $dir/tests/$test.log ]; then
         $dir/checkmem.py $dir/tests/$test.log
         if [ $? -ne 0 ]; then return 1; fi
     fi
