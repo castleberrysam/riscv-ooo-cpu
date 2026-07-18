@@ -350,6 +350,11 @@ static void tick() {
 int main(int argc, char** argv) {
   bool error = false;
 
+  // Initialize time vars (must be done before gotos)
+  clock_t start = 0;
+  clock_t stop = 0;
+  long long stopat = 0;
+
   // Initialize context
   context = new VerilatedContext;
   context->commandArgs(argc, argv);
@@ -360,8 +365,19 @@ int main(int argc, char** argv) {
   // Initialize ROM
   FILE* romfile = open_argfile("memfile", "r", nullptr);
   if(romfile) {
-    for(size_t i = 0; i < ROM_SIZE; i++) {
-      if(fscanf(romfile, "%x\n", &mem_rom[i]) != 1) {break;}
+    for(size_t i = 0; i <= ROM_SIZE; i++) {
+      if(i == ROM_SIZE) {
+        fprintf(stderr, "ERROR: memfile size exceeds the ROM size (%d dwords)\n", ROM_SIZE);
+        error = true;
+        goto cleanup;
+      }
+
+      if(fscanf(romfile, "%x\n", &mem_rom[i]) != 1) {
+        if (feof(romfile)) break;
+        fprintf(stderr, "ERROR: malformed memfile\n");
+        error = true;
+        goto cleanup;
+      }
     }
     fclose(romfile);
   }
@@ -370,11 +386,6 @@ int main(int argc, char** argv) {
   uartfile = open_argfile("uartfile", "w", stdout);
   tracefile = open_argfile("tracefile", "w", nullptr);
   logfile = open_argfile("logfile", "w", nullptr);
-
-  // Initialize time vars (must be done before gotos)
-  clock_t start = 0;
-  clock_t stop = 0;
-  long long stopat = 0;
 
   // Initialize models
   tb_top = new Vtb_top(context);
