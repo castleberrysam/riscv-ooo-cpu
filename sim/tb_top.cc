@@ -145,6 +145,10 @@ static struct {
   unsigned dc_write_merge;
   unsigned dc_write_alloc_mshr;
   unsigned dc_write_hit_mshr;
+
+  unsigned lq_stall_addr;
+  unsigned lq_stall_sq_no_addr;
+  unsigned lq_stall_sq_same_addr;
 } stats;
 
 static uint64_t bus_data[8];
@@ -321,6 +325,10 @@ static void print_stats() {
   printf("DC_WRITE_MERGE:      %d\n", stats.dc_write_merge);
   printf("DC_WRITE_ALLOC_MSHR: %d\n", stats.dc_write_alloc_mshr);
   printf("DC_WRITE_HIT_MSHR:   %d\n", stats.dc_write_hit_mshr);
+
+  printf("LQ_STALL_ADDR:       %d\n", stats.lq_stall_addr);
+  printf("LQ_STALL_SQ_NO_ADDR: %d\n", stats.lq_stall_sq_no_addr);
+  printf("LQ_STALL_SQ_SAME_ADDR: %d\n", stats.lq_stall_sq_same_addr);
 }
 
 static const char* get_csr_name(uint16_t addr) {
@@ -720,6 +728,17 @@ int tb_trace_lsq_dispatch(const svBitVecVal* robid, const svBitVecVal* lsqid,
   rob_entry.memop = *op;
   rob_entry.membase = *base;
   rob_entry.memdata = *wdata;
+
+  return 0;
+}
+
+int tb_trace_lsq_stall(const svBit lq_stall_addr,
+                       const svBit lq_stall_sq_no_addr,
+                       const svBit lq_stall_sq_same_addr)
+{
+  if(lq_stall_addr) stats.lq_stall_addr++;
+  if(lq_stall_sq_no_addr) stats.lq_stall_sq_no_addr++;
+  if(lq_stall_sq_same_addr) stats.lq_stall_sq_same_addr++;
 
   return 0;
 }

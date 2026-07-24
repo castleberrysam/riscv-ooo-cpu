@@ -82,6 +82,7 @@ module tb_top();
   import "DPI-C" task tb_trace_decode(input bit [ROBID_MSB:0] robid, input bit [4:0] rsop, input bit [31:0] insn, input bit [31:0] imm);
   import "DPI-C" task tb_trace_lsq_base(input bit [4:0] lsqid, input bit [31:0] base);
   import "DPI-C" task tb_trace_lsq_dispatch(input bit [ROBID_MSB:0] robid, input bit [4:0] lsqid, input bit [3:0] op, input bit [31:0] base, input bit [31:0] wdata);
+  import "DPI-C" task tb_trace_lsq_stall(input bit lq_stall_addr, input bit lq_stall_sq_no_addr, input bit lq_stall_sq_same_addr);
   import "DPI-C" task tb_trace_lsq_wdata(input bit [4:0] lsqid, input bit [31:0] wdata);
   import "DPI-C" task tb_trace_rob_retire(input bit [ROBID_MSB:0] robid, input bit [6:0] retop, input bit [31:2] addr, input bit error, input bit mispred, input bit [4:0] ecause, input bit [5:0] rd, input bit [31:0] result);
   import "DPI-C" task tb_trace_retire_stall(input bit [ROBID_MSB:0] robid, input bit empty, input bit executed, input bit [6:0] retop);

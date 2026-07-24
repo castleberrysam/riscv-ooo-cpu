@@ -718,6 +718,15 @@ module lsq #(
       tb_top.tb_log_lsq_inflight(
         lq_valid,
         sq_valid);
+
+  wire lq_stall_addr = ~lq_issue_rdy & |(lq_valid & ~lq_issued_fwd & ~lq_addr_rdy);
+  wire lq_stall_sq_no_addr = lq_issue_rdy_r & dcache_lsq_ready & ~rob_flush & |lq_sq_hits_no_addr;
+  wire lq_stall_sq_same_addr = lq_issue_rdy_r & dcache_lsq_ready & ~rob_flush & |lq_sq_hits_same_addr;
+  always @(posedge clk)
+    tb_top.tb_trace_lsq_stall(
+      lq_stall_addr,
+      lq_stall_sq_no_addr,
+      lq_stall_sq_same_addr);
   /*verilator lint_on WIDTH*/
 `endif
 
