@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // RISC-V instruction decoder
 module decode #(
   parameter ROBID_MSB = 4,
@@ -20,7 +22,7 @@ module decode #(
   output                    decode_rob_valid,
   output                    decode_error,
   output [1:0]              decode_ecause,
-  output [6:0]              decode_retop,
+  output retop_t            decode_retop,
   output                    decode_bptaken,
   output                    decode_raspush,
   output                    decode_raspop,
@@ -38,7 +40,7 @@ module decode #(
 
   // rename interface
   output                    decode_rename_valid,
-  output [4:0]              decode_rsop,
+  output rsop_t             decode_rsop,
   output [ROBID_MSB:0]      decode_robid,
   output                    decode_uses_rs1,
   output                    decode_uses_rs2,
@@ -63,7 +65,7 @@ module decode #(
 
   wire        fmt_r, fmt_i, fmt_s, fmt_b, fmt_u, fmt_j, fmt_inv;
   wire [31:0] imm;
-  wire [4:0]  rsop;
+  rsop_t      rsop;
 
   localparam
     ERR_IALIGN   = 2'b00,
@@ -120,8 +122,14 @@ module decode #(
   wire insn_complex;
   assign insn_complex = fmt_r & insn[25];
 
-  wire [2:0] brop;
-  assign brop = {~|funct3[2:1],funct3[2:1]};
+  funct3_alu_t brop;
+  always @(*)
+    case (funct3[2:1])
+      2'b00: brop = FUNCT3_ALU_XOR_SEQ; // BEQ/BNE
+      2'b10: brop = FUNCT3_ALU_SLT; // BLT/BGE
+      2'b11: brop = FUNCT3_ALU_SLTU; // BLTU/BGEU
+      default: brop = funct3_alu_t'('0);
+    endcase
 
   // SRLI alternation: special case
   wire altop;
@@ -132,8 +140,8 @@ module decode #(
   assign rs2 = insn[24:20];
   assign rd = insn[11:7];
 
-  wire [2:0] csrop;
-  mux #(3, 2) csrop_mux(funct3[1] & (rs1 == 0), {3'b000, funct3}, csrop);
+  csrop_t csrop;
+  mux #($bits(csrop_t), 2) csrop_mux(funct3[1] & (rs1 == 0), {CSROP_GET, funct3[1:0]}, csrop);
 
   wire uses_rd, uses_rs1, uses_rs2;
   assign uses_rd = (fmt_r | fmt_i | fmt_u | fmt_j) & (rd != 0);
@@ -159,7 +167,13 @@ module decode #(
   assign decode_rob_valid = valid & ~rename_stall;
   assign decode_error = error | fmt_inv;
   mux #(2, 4) decode_ecause_mux({error, 1'b0/*addr[1]*/}, {ERR_IALIGN, ERR_IFAULT, ERR_IILLEGAL, ERR_IILLEGAL}, decode_ecause);
-  assign decode_retop = {fmt_b, insn_csr, fmt_j | insn_jalr, fmt_s, funct3[2:0]};
+
+  assign decode_retop.funct3 = funct3[2:0];
+  assign decode_retop.store = fmt_s;
+  assign decode_retop.jump = fmt_j | insn_jalr;
+  assign decode_retop.csr = insn_csr;
+  assign decode_retop.branch = fmt_b;
+
   assign decode_bptaken = bptaken;
 
   // ras push/pop is according to hints given in the spec
@@ -224,10 +238,36 @@ module decode #(
   assign imm = {32{fmt_i}} & fmt_i_imm | {32{fmt_s}} & fmt_s_imm |
       {32{fmt_b}} & fmt_b_imm | {32{fmt_u}} & fmt_u_imm | {32{fmt_j}} & fmt_j_imm;
 
-  assign rsop = {5{decode_uses_memory}} & {1'b0,fmt_s,funct3} | {5{fmt_j | insn_jalr | fmt_u}} &
-      5'b00000 | {5{fmt_b}} & {2'b01, brop} | {5{insn_csr}} & {2'b00, csrop} |
-      {5{!(decode_uses_memory | fmt_j | fmt_u | fmt_b | insn_jalr | insn_csr)}} &
-      {insn_complex | insn_aluext, insn_complex | altop, funct3};
+  wire rsop_ls_en = decode_uses_memory;
+  rsop_ls_t rsop_ls;
+  assign rsop_ls.funct3 = funct3_ls_t'(funct3);
+  assign rsop_ls.store = fmt_s;
+  assign rsop_ls.rsvd = '0;
+
+  wire rsop_br_en = fmt_b;
+  rsop_alu_t rsop_br;
+  assign rsop_br.funct3 = brop;
+  assign rsop_br.altop = 1'b1; // select SEQ instead of XOR
+  assign rsop_br.aluext = 1'b0;
+
+  wire rsop_csr_en = insn_csr;
+  rsop_csr_t rsop_csr;
+  assign rsop_csr.csrop = csrop;
+  assign rsop_csr.rsvd = '0;
+
+  wire rsop_alu_en = ~rsop_ls_en & ~rsop_br_en & ~rsop_csr_en & ~fmt_j & ~insn_jalr & ~fmt_u;
+  rsop_alu_t rsop_alu;
+  assign rsop_alu.funct3 = funct3_alu_t'(funct3);
+  assign rsop_alu.altop = altop | insn_complex;
+  assign rsop_alu.aluext = insn_aluext | insn_complex;
+
+  always @(*) begin
+    rsop = '0;
+    if(rsop_ls_en) rsop |= rsop_ls;
+    if(rsop_br_en) rsop |= rsop_br;
+    if(rsop_csr_en) rsop |= rsop_csr;
+    if(rsop_alu_en) rsop |= rsop_alu;
+  end
 
 `ifndef SYNTHESIS
   always @(posedge clk)

@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // reservation stations for execute units (scalu/mcalu)
 module exers #(
   parameter ROBID_MSB = 4,
@@ -8,7 +10,7 @@ module exers #(
 
   // rename interface
   input                rename_exers_write,
-  input [4:0]          rename_op,
+  input rsop_t         rename_op,
   input [ROBID_MSB:0]  rename_robid,
   input [5:0]          rename_rd,
   input                rename_op1ready,
@@ -26,14 +28,14 @@ module exers #(
   // scalu interface
   output               exers_scalu0_issue,
   output               exers_scalu1_issue,
-  output [4:0]         exers_scalu_op,
+  output rsop_alu_t    exers_scalu_op,
   input                scalu0_stall,
   input                scalu1_stall,
 
   // mcalu interface
   output               exers_mcalu0_issue,
   output               exers_mcalu1_issue,
-  output [4:0]         exers_mcalu_op,
+  output rsop_alu_t    exers_mcalu_op,
   input                mcalu0_stall,
   input                mcalu1_stall,
 
@@ -55,7 +57,7 @@ module exers #(
   wire resolve_valid = (wb_valid & (~wb_error) & (~wb_rd[5]));
 
   wire [RS_ENTRIES-1:0]                 rs_valid;
-  wire [(RS_ENTRIES*5)-1:0]             rs_op;
+  rsop_t [RS_ENTRIES-1:0]               rs_op;
   wire [(RS_ENTRIES*6)-1:0]             rs_rd;
   wire [(RS_ENTRIES*(ROBID_MSB+1))-1:0] rs_robid;
 
@@ -89,7 +91,7 @@ module exers #(
   (.clk(clk), .set(insert_rs), .rst(rst_vec), .enable(1'b0), .d(1'b0), .q(rs_valid));
 
   // Single port entries
-  flop #(5) rs_op_flop [RS_ENTRIES-1:0]
+  flop #($bits(rsop_t)) rs_op_flop [RS_ENTRIES-1:0]
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(insert_rs), .d(rename_op), .q(rs_op));
   flop #(6) rs_rd_flop [RS_ENTRIES-1:0]
   (.clk(clk), .set(1'b0), .rst(1'b0), .enable(insert_rs), .d(rename_rd), .q(rs_rd));
@@ -131,7 +133,7 @@ module exers #(
   assign issue_valid = ~issue_invalid;
 
   // Functional Issue Unit Arbitration 
-  wire is_sc_op = (~&exers_scalu_op[4:3]);
+  wire is_sc_op = ~exers_scalu_op.altop && ~exers_scalu_op.aluext;
   wire [3:0] issue_status = {is_sc_op & ~scalu1_stall, is_sc_op & ~scalu0_stall, ~mcalu1_stall, ~mcalu0_stall}; // SCALU1: lowest priority, MCALU1: highest
   wire [3:0] issue_vec;
   privector #(4, 1) issue_alu_pripff (
@@ -153,7 +155,7 @@ module exers #(
   premux #(6, 32) exers_rd_mux (.sel(issue_ohidx), .in(rs_rd), .out(exers_rd));
   premux #(32, 32) exers_op1_mux (.sel(issue_ohidx), .in(rs_op1), .out(exers_op1));
   premux #(32, 32) exers_op2_mux (.sel(issue_ohidx), .in(rs_op2), .out(exers_op2));
-  premux #(5, 32) exers_mcalu_op_mux (.sel(issue_ohidx), .in(rs_op), .out(exers_mcalu_op));
+  premux #($bits(rsop_alu_t), 32) exers_mcalu_op_mux (.sel(issue_ohidx), .in(rs_op), .out(exers_mcalu_op));
   assign exers_scalu_op = exers_mcalu_op;
   assign exers_stall = rs_full;
 

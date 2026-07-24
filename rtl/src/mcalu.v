@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // multi-cycle alu
 module mcalu #(
   parameter ROBID_MSB = 4
@@ -7,7 +9,7 @@ module mcalu #(
 
   // exers interface
   input                exers_mcalu_issue,
-  input [4:0]          exers_mcalu_op,
+  input rsop_alu_t     exers_mcalu_op,
   input [ROBID_MSB:0]  exers_robid,
   input [5:0]          exers_rd,
   input [31:0]         exers_op1,
@@ -27,7 +29,7 @@ module mcalu #(
   input                rob_flush);
 
   wire               valid;
-  wire [4:0]         op;
+  rsop_alu_t         op;
   wire [ROBID_MSB:0] robid;
   wire [5:0]         rd;
   wire [31:0]        op1;
@@ -36,7 +38,7 @@ module mcalu #(
   flop valid_flop (.clk(clk), .set(1'b0), .rst(rst|rob_flush), .enable(~mcalu_stall),
     .d(exers_mcalu_issue), .q(valid));
 
-  flop #(5) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
+  flop #($bits(rsop_alu_t)) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
     .d(exers_mcalu_op), .q(op));
   flop #(ROBID_MSB+1) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(~mcalu_stall),
     .d(exers_robid), .q(robid));
@@ -51,7 +53,7 @@ module mcalu #(
   wire        mul_done, div_done;
   wire [31:0] sc_result, mul_result, div_result;
 
-  wire is_mc_op = &op[4:3];
+  wire is_mc_op = op.altop & op.aluext;
   wire done = ~is_mc_op | mul_done | div_done;
 
   // MC Outputs
@@ -64,7 +66,7 @@ module mcalu #(
 
   // Result sequencing
   wire [31:0] comp_result;
-  mux #(32, 2) comp_result_flop (.sel(op[2]), .in({div_result, mul_result}), .out(comp_result));
+  mux #(32, 2) comp_result_flop (.sel(op.funct3[2]), .in({div_result, mul_result}), .out(comp_result));
 
   mux #(32, 2) mcalu_result_flop (.sel(is_mc_op), .in({comp_result, sc_result}), .out(mcalu_result));
 
@@ -79,8 +81,8 @@ module mcalu #(
   mul_behav mul(
     .clk(clk),
     .rst(rst | rob_flush),
-    .req(valid & is_mc_op & ~op[2]),
-    .op(op[1:0]),
+    .req(valid & is_mc_op & ~op.funct3[2]),
+    .op(op.funct3[1:0]),
     .op1(op1),
     .op2(op2),
     .done(mul_done),
@@ -90,8 +92,8 @@ module mcalu #(
   div div(
     .clk(clk),
     .rst(rst | rob_flush),
-    .req(valid & is_mc_op & op[2]),
-    .op(op[1:0]),
+    .req(valid & is_mc_op & op.funct3[2]),
+    .op(op.funct3[1:0]),
     .op1(op1),
     .op2(op2),
     .done(div_done),

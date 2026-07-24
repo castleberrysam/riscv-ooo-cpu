@@ -1,4 +1,6 @@
 `include "rtldefs.vh"
+`include "decode.vh"
+
 // csr (control and status register) unit
 module csr #(
   parameter ROBID_MSB = 4
@@ -8,7 +10,7 @@ module csr #(
 
   // rename interface
   input                rename_csr_write,
-  input [4:0]          rename_op,
+  input rsop_csr_t     rename_op,
   input [ROBID_MSB:0]  rename_robid,
   input [5:0]          rename_rd,
   input [31:0]         rename_op1,
@@ -92,7 +94,7 @@ module csr #(
   flop #(1) valid_flop (.clk(clk), .set(1'b0), .rst(rst), .enable(~csr_stall),
       .d(rename_csr_write), .q(valid));
 
-  wire [2:0]         op;
+  csrop_t            op;
   wire [ROBID_MSB:0] robid;
   wire [5:0]         rd;
   wire [31:0]        op1;
@@ -100,8 +102,8 @@ module csr #(
 
   wire stage_en = ~csr_stall & rename_csr_write;
 
-  flop #(3) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
-      .d(rename_op[2:0]), .q(op));
+  flop #($bits(csrop_t)) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
+      .d(rename_op.csrop), .q(op));
   flop #(ROBID_MSB+1) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
       .d(rename_robid), .q(robid));
   flop #(6) rd_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
@@ -158,13 +160,13 @@ module csr #(
     .out(csr_result));
 
   // write data mux
-  wire wen    = |op[1:0] & valid;
+  wire wen = valid & (op != CSROP_GET);
   wire csr_ro   = &addr[11:10];
-  wire wr_error = |op[1:0] & csr_ro;
+  wire wr_error = csr_ro & (op != CSROP_GET);
 
   wire [31:0] wdata;
   mux #(32, 4) wdata_mux (
-      .sel(op[1:0]),
+      .sel(op),
       .in({csr_result&~op1, csr_result|op1, op1, 32'b0}),
       .out(wdata));
 
@@ -180,7 +182,7 @@ module csr #(
       .d(1'b0), .q(l2fifo_stall_r));
 
   // csrrs/c not supported
-  assign csr_bfs_valid = valid & ~op[1] & sel_bfs & ~bfs_req_r;
+  assign csr_bfs_valid = valid & (op == CSROP_GET || op == CSROP_SET) & sel_bfs & ~bfs_req_r;
   assign csr_bfs_addr = addr[3:0];
   assign csr_bfs_wen = wen;
   assign csr_bfs_wdata = op1;

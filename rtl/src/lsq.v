@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // load-store queue
 module lsq #(
   parameter ROBID_MSB = 4
@@ -7,7 +9,7 @@ module lsq #(
 
   // rename interface
   input                rename_lsq_write,
-  input [3:0]          rename_op,
+  input rsop_ls_t      rename_op,
   input [ROBID_MSB:0]  rename_robid,
   input [5:0]          rename_rd,
   input                rename_op1ready,
@@ -128,7 +130,7 @@ module lsq #(
 
   // rename interface
   mux #(1,2) lsq_stall_mux(
-    .sel(rename_op[3]),
+    .sel(rename_op.store),
     .in({sq_full,~lq_insert_rdy}),
     .out(lsq_stall));
 
@@ -167,7 +169,7 @@ module lsq #(
   premux #(32,16) lq_data_mux(lq_remove_sel, lq_data, lsq_wb_result);
 
   // ------------------------------------------------------------------load queue
-  assign lq_insert_beat = rename_lsq_write & ~rename_op[3] & lq_insert_rdy;
+  assign lq_insert_beat = rename_lsq_write & ~rename_op.store & lq_insert_rdy;
   assign lq_insert_en = {16{lq_insert_beat}} & lq_insert_sel;
 
   assign lq_issue_req = lq_issue_rdy_r & ~lq_sq_hit & ~rob_flush;
@@ -243,7 +245,7 @@ module lsq #(
     .rst(1'b0),
     .set(1'b0),
     .enable(lq_insert_en),
-    .d(rename_op[2:0]),
+    .d(rename_op.funct3),
     .q(lq_type));
 
   flop #(ROBID_MSB+1) lq_robid_r[15:0](
@@ -281,6 +283,7 @@ module lsq #(
 
   wire [15:0] lq_op2_fwd_en = {16{wb_en}} & lq_valid & ~lq_op2_rdy & lq_op2_cmp;
 
+  // For LBCMP only, op2 is an 8-bit value provided by decode (byte value to compare to)
   mux #(8,2) lq_op2_next_mux[15:0](
     .sel(lq_op2_fwd_en),
     .in({wb_result[7:0],rename_op2[7:0]}),
@@ -294,12 +297,13 @@ module lsq #(
     .d(lq_op2_next),
     .q(lq_op2));
 
+  // For LBMP only, op2 is immediately ready at dispatch time
   flop lq_op2_rdy_r[15:0](
     .clk(clk),
     .rst(1'b0),
     .set(lq_op2_fwd_en),
     .enable(lq_insert_en),
-    .d((~&rename_op[1:0]) | rename_op2ready),
+    .d((~&rename_op.funct3[1:0]) | rename_op2ready),
     .q(lq_op2_rdy));
 
   // lq_addr
@@ -444,7 +448,7 @@ module lsq #(
   assign lq_sq_hit = |lq_sq_hits;
 
   // -----------------------------------------------------------------store queue
-  assign sq_insert_beat = rename_lsq_write & rename_op[3] & ~sq_full;
+  assign sq_insert_beat = rename_lsq_write & rename_op.store & ~sq_full;
   assign sq_insert_en = {16{sq_insert_beat}} & sq_tail;
 
   assign sq_issue_req = sq_head & sq_valid & sq_addr_rdy &
@@ -660,7 +664,7 @@ module lsq #(
     .rst(1'b0),
     .set(1'b0),
     .enable(sq_insert_en),
-    .d(rename_op[2:0]),
+    .d(rename_op.funct3),
     .q(sq_type));
 
   flop #(32) sq_imm_r[15:0](
@@ -677,7 +681,7 @@ module lsq #(
     if(rename_lsq_write & ~lsq_stall)
       tb_top.tb_trace_lsq_dispatch(
         rename_robid,
-        rename_op[3] ? ($clog2(sq_tail) | (1 << 4)) : $clog2(lq_insert_sel),
+        rename_op.store ? ($clog2(sq_tail) | (1 << 4)) : $clog2(lq_insert_sel),
         rename_op,
         rename_op1,
         rename_op2);

@@ -1,4 +1,5 @@
 `include "buscmd.vh"
+`include "decode.vh"
 
 module cpu #(
   parameter BTB_NUM_SETS = 256,
@@ -15,6 +16,11 @@ module cpu #(
   /*AUTOOUTPUT*/
 );
 
+  retop_t decode_retop;
+  rsop_t decode_rsop;
+  rsop_t rename_op;
+  rsop_alu_t exers_scalu_op;
+  rsop_alu_t exers_mcalu_op;
   /*AUTOWIRE*/
 
   csr #(

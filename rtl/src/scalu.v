@@ -1,4 +1,6 @@
 // single-cycle alu
+`include "decode.vh"
+
 module scalu #(
   parameter ROBID_MSB = 4
   )(
@@ -7,7 +9,7 @@ module scalu #(
 
   // exers interface
   input                exers_scalu_issue,
-  input [4:0]          exers_scalu_op,
+  input rsop_alu_t     exers_scalu_op,
   input [ROBID_MSB:0]  exers_robid,
   input [5:0]          exers_rd,
   input [31:0]         exers_op1,
@@ -27,7 +29,7 @@ module scalu #(
   input                rob_flush);
 
   reg               valid;
-  reg [4:0]         op;
+  rsop_alu_t        op;
   reg [ROBID_MSB:0] robid;
   reg [5:0]         rd;
   reg [31:0]        op1;

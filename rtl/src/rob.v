@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // reorder buffer and retirement unit
 module rob #(
   parameter ROBID_MSB = 4,
@@ -10,7 +12,7 @@ module rob #(
   input                     decode_rob_valid,
   input                     decode_error,
   input [1:0]               decode_ecause,
-  input [6:0]               decode_retop,
+  input retop_t             decode_retop,
   input [31:2]              decode_addr,
   input [5:0]               decode_rd,
   input                     decode_bptaken,
@@ -69,7 +71,7 @@ module rob #(
 
   wire [ROB_SIZE-1:0]    buf_executed;
   wire [ROB_SIZE-1:0]    buf_error;
-  wire [ROB_SIZE*7-1:0]  buf_retop;
+  retop_t [ROB_SIZE-1:0] buf_retop;
   wire [ROB_SIZE*30-1:0] buf_addr;
   wire [ROB_SIZE*6-1:0]  buf_rd;
   wire [ROB_SIZE*5-1:0]  buf_ecause;
@@ -90,7 +92,7 @@ module rob #(
 
   wire         ret_valid;
   wire         ret_error;
-  wire  [ 6:0] ret_retop;
+  retop_t      ret_retop;
   wire  [31:2] ret_addr;
   wire  [ 5:0] ret_rd;
   wire  [ 4:0] ret_ecause;
@@ -116,15 +118,23 @@ module rob #(
   wire decode_beat;
   assign decode_beat = decode_rob_valid & ~rob_full;
 
+  // Bit [0] of funct3 determines the branch sense (BEQ<->BNE, BLT<->BGE, etc.)
   wire br_result;
-  assign br_result = ret_result[0] ^ ret_retop[0];
+  assign br_result = ret_result[0] ^ ret_retop.funct3[0];
 
   wire ret_exc, ret_mispred_type, ret_mispred_dir, ret_mispred_tgt, ret_mispred;
   assign ret_exc = ret_valid & ret_error;
-  assign ret_mispred_type = ret_bptaken & ~ret_retop[4] & ~ret_retop[6];
-  assign ret_mispred_tgt = ret_retop[4] & ret_forwarded & (ret_bptarget_r != ret_result[31:2]);
-  assign ret_mispred_dir = ret_retop[4] & ~ret_bptaken |
-                           ret_retop[6] & (br_result ^ ret_bptaken);
+
+  // We predicted taken, but the instruction is not a jump/branch
+  assign ret_mispred_type = ret_bptaken & ~ret_retop.jump & ~ret_retop.branch;
+
+  // We predicted the target incorrectly
+  assign ret_mispred_tgt = ret_retop.jump & ret_forwarded & (ret_bptarget_r != ret_result[31:2]);
+
+  // We predicted the direction incorrectly
+  assign ret_mispred_dir = ret_retop.jump & ~ret_bptaken |
+                           ret_retop.branch & (br_result ^ ret_bptaken);
+
   assign ret_mispred = ret_valid & (ret_mispred_type | ret_mispred_tgt | ret_mispred_dir);
 
   // decode interface
@@ -138,9 +148,9 @@ module rob #(
   assign rob_flush = ret_exc | ret_mispred;
 
   // fetch interface
-  assign rob_ret_branch = rob_ret_valid & (ret_retop[4] | ret_retop[6]);
+  assign rob_ret_branch = rob_ret_valid & (ret_retop.jump | ret_retop.branch);
   assign rob_ret_bptaken = br_result;
-  assign rob_ret_uncond = ret_retop[4];
+  assign rob_ret_uncond = ret_retop.jump;
   assign rob_ret_raspush = ret_raspush_r;
   assign rob_ret_raspop = ret_raspop_r;
   assign rob_ret_bpattr = ret_bpattr_r;
@@ -149,7 +159,7 @@ module rob #(
 
   // csr interface
   assign rob_ret_valid = ret_valid & ~ret_error;
-  assign rob_ret_csr = rob_ret_valid & ret_retop[5];
+  assign rob_ret_csr = rob_ret_valid & ret_retop.csr;
   assign rob_csr_valid = ret_exc;
   assign rob_csr_epc = ret_addr;
   assign rob_csr_ecause = ret_ecause;
@@ -161,7 +171,7 @@ module rob #(
   assign rob_ret_result = ret_forwarded ? {ret_target,2'b0} : ret_result;
 
   // lsq interface (out)
-  assign rob_ret_store = rob_ret_valid & ret_retop[3];
+  assign rob_ret_store = rob_ret_valid & ret_retop.store;
 
   // forward buf_head when reading consecutive addrs
   inc #(ROBID_MSB+2) buf_head_inc ({buf_head_pol, buf_head}, buf_head_next);
@@ -190,7 +200,7 @@ module rob #(
     for (i = 0; i < ROB_SIZE; i = i + 1) begin
       // dual write
       flop buf_executed_flop(clk, 0, 0, buf_tail_en[i] | wb_robid_en[i],
-        buf_tail_en[i] & (decode_error | decode_retop[3]) | wb_robid_en[i], buf_executed[i]);
+        buf_tail_en[i] & (decode_error | decode_retop.store) | wb_robid_en[i], buf_executed[i]);
       flop buf_error_flop   (clk, 0, 0, buf_tail_en[i] | wb_robid_en[i],
         buf_tail_en[i] & decode_error | wb_robid_en[i] & wb_error, buf_error[i]);
       flop #(5) buf_ecause_flop  (clk, 0, 0, buf_tail_en[i] | wb_robid_en[i],
@@ -198,7 +208,7 @@ module rob #(
         buf_ecause[(i+1)*5-1:i*5]);
       // single write
       flop #(32) buf_result_flop(clk, 0, 0, wb_robid_en[i], wb_result,      buf_result   [(i+1)*32-1:i*32]);
-      flop #(7)  buf_retop_flop (clk, 0, 0, buf_tail_en[i], decode_retop,   buf_retop    [(i+1)*7-1:i*7]);
+      flop #($bits(retop_t)) buf_retop_flop (clk, 0, 0, buf_tail_en[i], decode_retop, buf_retop[i]);
       flop #(30) buf_addr_flop  (clk, 0, 0, buf_tail_en[i], decode_addr,    buf_addr     [(i+1)*30-1:i*30]);
       flop #(6)  buf_rd_flop    (clk, 0, 0, buf_tail_en[i], decode_rd,      buf_rd       [(i+1)*6-1:i*6]);
       flop #(30) buf_target_flop(clk, 0, 0, buf_tail_en[i], decode_target,  buf_target   [(i+1)*30-1:i*30]);
@@ -215,7 +225,7 @@ module rob #(
   // read
   wire        read_executed;
   wire        read_error;
-  wire [ 6:0] read_retop;
+  retop_t     read_retop;
   wire [29:0] read_addr;
   wire [ 5:0] read_rd;
   wire [ 4:0] read_ecause;
@@ -225,7 +235,7 @@ module rob #(
   wire        read_forwarded;
   premux #(1,  ROB_SIZE) buf_executed_mux(ret_rd_addr_splat, buf_executed, read_executed);
   premux #(1,  ROB_SIZE) buf_error_mux(ret_rd_addr_splat, buf_error, read_error);
-  premux #(7,  ROB_SIZE) buf_retop_mux(ret_rd_addr_splat, buf_retop, read_retop);
+  premux #($bits(retop_t), ROB_SIZE) buf_retop_mux(ret_rd_addr_splat, buf_retop, read_retop);
   premux #(30, ROB_SIZE) buf_addr_mux(ret_rd_addr_splat, buf_addr, read_addr);
   premux #(6,  ROB_SIZE) buf_rd_mux(ret_rd_addr_splat, buf_rd, read_rd);
   premux #(5,  ROB_SIZE) buf_ecause_mux(ret_rd_addr_splat, buf_ecause, read_ecause);
@@ -243,9 +253,20 @@ module rob #(
   premux #(BPATTR_WIDTH,ROB_SIZE) u_read_bpattr   (ret_rd_addr_splat, bpattr_r,   read_bpattr);
   premux #(30,          ROB_SIZE) u_read_bptarget (ret_rd_addr_splat, bptarget_r, read_bptarget);
 
+  // I think this check is supposed to prevent the following scenario:
+  //
+  // 1. Decode writes a store into the ROB and sends it to rename
+  // 2. Rename stalls
+  // 3. The ROB retires the store instruction before it enters the store queue
+  //
+  // It might not actually be possible since rename can only stall due to
+  // backpressure from the store queue, which implies the store queue is full,
+  // which implies the store being retired in the ROB is not the same store that
+  // is in rename.
   flop ret_valid_flop(clk, rst | rob_flush, 0, 1,
-      read_executed & ~ret_rd_empty & (~read_retop[3] | ~rob_rename_ishead), ret_valid);
-  flop #(7)  ret_retop_flop     (clk, 0, 0, 1, read_retop, ret_retop);
+      read_executed & ~ret_rd_empty & (~read_retop.store | ~rob_rename_ishead), ret_valid);
+
+  flop #($bits(retop_t)) ret_retop_flop(clk, 0, 0, 1, read_retop, ret_retop);
   flop #(30) ret_addr_flop      (clk, 0, 0, 1, read_addr, ret_addr);
   flop #(6)  ret_rd_flop        (clk, 0, 0, 1, read_rd, ret_rd);
   flop #(5)  ret_ecause_flop    (clk, 0, 0, 1, read_ecause, ret_ecause);

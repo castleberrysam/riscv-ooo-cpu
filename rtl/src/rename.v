@@ -1,3 +1,5 @@
+`include "decode.vh"
+
 // register rename and instruction dispatch unit
 module rename #(
   parameter ROBID_MSB = 4
@@ -8,7 +10,7 @@ module rename #(
   // decode interface
   input                decode_rename_valid,
   input [31:2]         decode_addr,
-  input [4:0]          decode_rsop,
+  input rsop_t         decode_rsop,
   input [ROBID_MSB:0]  decode_robid,
   input [5:0]          decode_rd,
   input                decode_uses_rs1,
@@ -42,7 +44,7 @@ module rename #(
   output               rename_exers_write,
   output               rename_lsq_write,
   output               rename_csr_write,
-  output [4:0]         rename_op,
+  output rsop_t        rename_op,
   output               rename_op1ready,
   output [31:0]        rename_op1,
   output               rename_op2ready,
@@ -66,7 +68,7 @@ module rename #(
   wire               stall;
   wire [ROBID_MSB:0] robid;
   wire [31:0]        addr;
-  wire [4:0]         op;
+  rsop_t             op;
   wire [5:0]         rd;
   wire               uses_rs1;
   wire               uses_rs2;
@@ -84,7 +86,7 @@ module rename #(
   flop valid_flop       (clk, rst | rob_flush, 0, !rename_stall, decode_rename_valid, valid);
   flop #(ROBID_MSB+1) robid_flop (clk, 0, 0, !rename_stall, decode_robid, robid);
   flop #(32) addr_flop  (clk, 0, 0, !rename_stall, {decode_addr, 2'b00}, addr);
-  flop #(5) op_flop     (clk, 0, 0, !rename_stall, decode_rsop, op);
+  flop #($bits(rsop_t)) op_flop(clk, 0, 0, !rename_stall, decode_rsop, op);
   flop #(6) rd_flop     (clk, 0, 0, !rename_stall, decode_rd, rd);
   flop uses_rs1_flop    (clk, 0, 0, !rename_stall, decode_uses_rs1, uses_rs1);
   flop uses_rs2_flop    (clk, 0, 0, !rename_stall, decode_uses_rs2, uses_rs2);
