@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <unordered_map>
 #include <time.h>
+#include <signal.h>
 
 #define ROB_SIZE 32
 #define LQ_SIZE 16
@@ -371,6 +372,21 @@ static void tick() {
   context->timeInc(1);
 }
 
+void cleanup(void) {
+  if(dumper) {dumper->close();}
+  fflush(stdout);
+  fflush(stderr);
+  if(uartfile != nullptr && uartfile != stdout) {fclose(uartfile);}
+  if(tracefile != nullptr) {fclose(tracefile);}
+  if(logfile != nullptr) {fclose(logfile);}
+}
+
+void handle_signal(int signal) {
+  fprintf(stderr, "ERROR: Caught signal %d, terminating...\n", signal);
+  cleanup();
+  exit(1);
+}
+
 int main(int argc, char** argv) {
   bool error = false;
 
@@ -438,6 +454,16 @@ int main(int argc, char** argv) {
       error = true;
       goto cleanup;
     }
+
+    // Register signal handler to make sure the dump file is closed properly
+    struct sigaction action;
+    action.sa_handler = handle_signal;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGHUP, &action, NULL);
+    sigaction(SIGPIPE, &action, NULL);
   } else {
     dump_running = false;
     dump_next_event = (uint64_t) -1ll;
@@ -487,12 +513,7 @@ int main(int argc, char** argv) {
   printf("Application return code: %d\n", return_code);
 
  cleanup:
-  if(dumper) {dumper->close();}
-  fflush(stdout);
-  fflush(stderr);
-  if(uartfile != nullptr && uartfile != stdout) {fclose(uartfile);}
-  if(tracefile != nullptr) {fclose(tracefile);}
-  if(logfile != nullptr) {fclose(logfile);}
+  cleanup();
 
   delete dram;
   delete tb_top;
