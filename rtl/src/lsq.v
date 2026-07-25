@@ -366,12 +366,23 @@ module lsq #(
     .in(dcache_lsq_lsqid),
     .out(dcache_lq_sel));
 
-  wire [15:0] dcache_lq_en = dcache_lq_sel & {16{dcache_lsq_valid}};
+  wire [15:0] dcache_lq_en = {16{dcache_lsq_valid}} & dcache_lq_sel;
+
+  wire [15:0] lq_result_en = dcache_lq_en | sq_lq_fwd_sel;
+
+  wire [15:0] lq_result_error = dcache_lq_en & {16{dcache_lsq_error}};
+
+  wire [31:0] sq_lq_fwd_data;
+  wire [15:0] [31:0] lq_result_data;
+  generate
+    for(i = 0; i < 16; i=i+1)
+      assign lq_result_data[i] = dcache_lq_en[i] ? dcache_lsq_rdata : sq_lq_fwd_data;
+  endgenerate
 
   flop lq_complete_r[15:0](
     .clk(clk),
     .rst(lq_insert_en),
-    .set(dcache_lq_en),
+    .set(lq_result_en),
     .enable(1'b0),
     .d(1'b0),
     .q(lq_complete));
@@ -380,15 +391,15 @@ module lsq #(
     .clk(clk),
     .rst(lq_insert_en),
     .set(1'b0),
-    .enable(dcache_lq_en),
-    .d(dcache_lsq_error),
+    .enable(lq_result_en),
+    .d(lq_result_error),
     .q(lq_error));
 
   flop #(5) lq_ecause_r[15:0](
     .clk(clk),
     .rst(1'b0),
     .set(1'b0),
-    .enable(dcache_lq_en),
+    .enable(lq_result_en),
     .d(5'b0), // TODO
     .q(lq_ecause));
 
@@ -396,8 +407,8 @@ module lsq #(
     .clk(clk),
     .rst(1'b0),
     .set(1'b0),
-    .enable(dcache_lq_en),
-    .d(dcache_lsq_rdata),
+    .enable(lq_result_en),
+    .d(lq_result_data),
     .q(lq_data));
 
   // load queue -> store queue interface (address conflict check)
@@ -440,12 +451,54 @@ module lsq #(
 
   // lq_sq_wide: enables 32-byte blocks for addr comparison (lbcmp)
   wire [15:0] lq_sq_en = lq_sq_sel & sq_valid;
-  wire lq_sq_wide = &lq_sq_type[1:0];
+  wire lq_sq_wide = (lq_sq_type == FUNCT3_LS_LBCMP);
 
-  wire [15:0] lq_sq_hits = lq_sq_en & (~sq_addr_rdy |
-                                       (lq_sq_addr_hit_hi &
-                                        ({16{lq_sq_wide}} | lq_sq_addr_hit_lo)));
+  wire [15:0] lq_sq_hits_no_addr = lq_sq_en & ~sq_addr_rdy;
+
+  wire [15:0] lq_sq_hits_same_addr = lq_sq_en & sq_addr_rdy &
+                                     lq_sq_addr_hit_hi &
+                                     ({16{lq_sq_wide}} | lq_sq_addr_hit_lo);
+
+  wire [15:0] lq_sq_hits = lq_sq_hits_no_addr | lq_sq_hits_same_addr;
+
   assign lq_sq_hit = |lq_sq_hits;
+
+  // store to load forwarding
+
+  // locate the youngest conflicting store that is older than the selected load
+  // this could probably be optimized further
+  wire [15:0] sq_lq_fwd_check;
+  agemat #(16,0) sq_lq_fwd_arb(
+    .clk(clk),
+    .rst(rst),
+    .insert_valid(sq_insert_beat),
+    .insert_sel(sq_tail),
+    .req(lq_sq_hits),
+    .grant_valid(),
+    .grant(sq_lq_fwd_check));
+
+  // keep it simple by only forwarding full words
+  wire [15:0] sq_type_sw;
+  generate
+    for(i = 0; i < 16; i=i+1)
+      assign sq_type_sw[i] = (sq_type[i*3+:3] == FUNCT3_LS_LW_SW);
+  endgenerate
+
+  // wire sq_lq_fwd_en = (lq_sq_type == FUNCT3_LS_LW_SW);
+  wire sq_lq_fwd_en = 1'b0;
+
+  wire [15:0] sq_lq_fwd_sel = {16{sq_lq_fwd_en}} &
+                              sq_lq_fwd_check &
+                              sq_type_sw &
+                              sq_addr_rdy &
+                              lq_sq_addr_hit_hi &
+                              lq_sq_addr_hit_lo &
+                              sq_data_rdy;
+
+  premux #(32,16) sq_lq_fwd_data_mux(
+    .sel(sq_lq_fwd_check),
+    .in(sq_data),
+    .out(sq_lq_fwd_data));
 
   // -----------------------------------------------------------------store queue
   assign sq_insert_beat = rename_lsq_write & rename_op.store & ~sq_full;
