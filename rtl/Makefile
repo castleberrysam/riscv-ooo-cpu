@@ -63,7 +63,7 @@ else ifeq ($(SIM),verilator)
 VERILATOR ?= verilator
 
 SRCS += $(shell realpath $(CURDIR)/../sim/tb_top.cc)
-SIMOPTS := --cc --exe --Mdir build --top tb_top
+SIMOPTS := --Mdir build --top tb_top
 SIMOPTS += --trace-fst --trace-max-array 128
 SIMOPTS += -o top
 
@@ -82,8 +82,19 @@ INCLUDES_ARG := $(patsubst %,-y %,$(INCLUDES))
 DEFINES := $(patsubst %,+define+%,$(DEFINES))
 
 build/top: $(SRCS) $(INCLUDES) $(AUTO_OUT) $(EXTRA_DEPS)
-	$(VERILATOR) $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	$(VERILATOR) --cc --exe $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
 	$(MAKE) -C build -f Vtb_top.mk OPT_SLOW=-O2 OPT_FAST=-O3 OPT_GLOBAL=-O3
+
+build/top.tree.json build/top.tree.meta.json: $(SRCS) $(INCLUDES) $(AUTO_OUT)
+	$(VERILATOR) --json-only --json-only-output build/top.tree.json --json-only-meta-output build/top.tree.meta.json $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+
+JSON2STEMS ?= json2stems
+
+build/top.stems: build/top.tree.json build/top.tree.meta.json
+	$(JSON2STEMS) build/top.tree.meta.json build/top.tree.json build/top.stems
+
+.PHONY: stems
+stems: build/top.stems
 else ifeq ($(SIM),iverilog)
 IVERILOG ?= iverilog
 
