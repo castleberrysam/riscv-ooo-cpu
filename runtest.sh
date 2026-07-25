@@ -132,11 +132,24 @@ function run_test {
     local plusargs=$4
 
     if [ $run_spike -ne 0 ]; then
-        make -j$(nproc) -C $dir/tests $test.elf || return 1
+        make -j$(nproc) -C $dir/tests $test.elf
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Error occurred while compiling the test" >&2
+            exit 1
+        fi
     fi
     if [ $run_rtl -ne 0 ]; then
-        make -j$(nproc) -C $dir/tests $test.hex || return 1
-        make -j$(nproc) -C $dir/rtl || return 1
+        make -j$(nproc) -C $dir/tests $test.hex
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Error occurred while compiling the test" >&2
+            exit 1
+        fi
+
+        make -j$(nproc) -C $dir/rtl
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Error occurred while compiling the RTL" >&2
+            exit 1
+        fi
     fi
 
     rm -f $dir/simtrace
@@ -254,8 +267,8 @@ else
         run_test $test $dump "$dumpfile" $plusargs >/dev/null 2>&1
         if [ $? -ne 0 ]; then
             echo "failed"
+        else
+            printf "passed ($(get_test_stats $test))\n"
         fi
-
-        printf "passed ($(get_test_stats $test))\n"
     done
 fi
