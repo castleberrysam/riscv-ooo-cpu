@@ -1,0 +1,140 @@
+Assume the core and bus both run at 1 GHz.
+
+DRAM chip: MT41K128M16XX-15E
+
+* Bandwidth
+
+** Bandwidth at DRAM interface
+
+Interface width: x16
+Data rate: 1333 MT/s
+
+Bandwidth = (2 bytes/transfer) * (1333e6 transfer/s) = 2.666 GB/s.
+
+** Bandwidth at bus interface
+
+Interface width: 8 bytes
+
+Each memory access consists of a request and response.
+No data can be transmitted during the request, so we need at least double the DRAM bandwidth.
+
+Bandwidth = ((8 bytes/cycle) * (1e9 cycles/s)) / 2 = 4 GB/s.
+
+** Bandwidth at L1-L2 interface
+
+Interface width: 8 bytes
+
+Unlike the bus interface, request and response paths are separate.
+
+Bandwidth = (8 bytes/cycle) * (1e9 cycles/s) = 8 GB/s.
+
+** Bandwidth at the CPU core
+
+Best case, the CPU issues one 4-byte load every cycle.
+
+Bandwidth = (4 bytes/cycle) * (1e9 cycles/s) = 4 GB/s.
+
+Also consider the common case of copying between memory regions.
+Each value copied requires a load followed by a store, halving the bandwidth.
+
+Bandwidth = ((4 bytes/cycle) * (1e9 cycles/s)) / 2 = 2 GB/s.
+
+* Latency and minimum buffer sizes
+
+Total capacity: 2 Gbit
+- Banks: 8
+- Rows/bank: 16384
+- Columns/row: 1024
+- Bits/word: 16
+
+Cache lines/row: (1024*(16/8))/64 = 32
+CL: 13.5 ns = 13.5 CPU clock cycles
+tRCD: 13.5 ns = 13.5 CPU clock cycles
+tRP: 13.5 ns = 13.5 CPU clock cycles
+
+A new read command can be issued every 8 DRAM clock cycles (due to the 8 cycle burst read).
+The bus doesn't have critical word first.
+
+Avg. miss latency from L2 for sequential access
+= (8 cycles to send request from L2 to DRAM controller) +
+  (2 cycles to send request from DRAM controller to DRAM) +
+  (14 cycles (CL) to read the DRAM column) +
+  (2 cycles to send first response data from DRAM controller to bus) +
+  (8 cycles to send all response data from bus to L2)
+= 34 cycles
+
+Avg. miss latency from L2 for random access
+= 34 cycles + (14 cycles (tRCD) to open the DRAM row)
+= 48 cycles
+
+Avg. miss latency from L2 for random access + closing previous row in same bank
+= 48 cycles + (14 cycles (tRP) to close the previous DRAM row)
+= 62 cycles
+
+** Minimum number of L2 MSHRs
+
+Consider the bottleneck at the DRAM interface (2.666 GB/s). Each fill is 64 B.
+Max. fills/s = (2.666 GB/s) / (64 B/fill) = 41.666e6 fills/s
+Time per fill = 1 / (41.666e6 fills/s) = 24 ns/fill = 24 cycles/fill
+
+We want to complete a fill every 24 cycles.
+Ideal # of concurrent fills in L2 = ceil (latency / max. cycles per fill) = ceil (62 / 24) = 3
+
+** Minimum number of L1 MSHRs
+
+L1 hit latency
+= 3 cycles
+
+L1 miss + L2 hit latency
+= (1 cycle to miss the L1 cache) +
+  (1 cycle to cross the L2 request FIFO) +
+  (2 cycles to cross the L2 tag) +
+  (3 cycles to cross the L2 data) +
+  (8 cycles to fill L1)
+= 15 cycles
+
+L1 miss + L2 miss latency
+= (L2 miss fill time) + (L2 hit latency)
+= (62 cycles) + (15 cycles)
+= 77 cycles
+
+*** When every lookup misses L2
+
+Ideal # of concurrent fills in L1 = max # of concurrent fills in L2 = 3
+
+*** When every lookup misses L1 and hits L2
+
+The core issues one 4-byte load per cycle. But worst case, every load is in a different cache line.
+From fill perspective, we can only complete one fill every 8 cycles due to L2-L1 bandwidth. So this is the bottleneck.
+
+Ideal # of concurrent fills in L1 = ceil (latency / max. cycles per fill) = ceil (15 / 8) = 2
+
+*** Considering both L2 hit and L2 miss
+
+The simplest way to consider both cases is to simply add them together.
+
+Ideal # of concurrent fills in L1 = 3 + 2 = 5
+
+But it won't really work this way in practice since we can't tell at L1 whether it is L1 miss or L1 hit.
+The L1 misses could starve L1 hits by allocating all the MSHRs.
+
+** Load/store queue size
+
+The following numbers are the minimum required to keep the memory hierarchy saturated.
+More than this minimum could still help a little bit since it prevents blocking dispatch.
+
+*** When every load misses L2
+
+The bottleneck is at DRAM interface. In this case we have one fill from DRAM per load. A new fill can be issued to DRAM every 24 cycles.
+
+Ideal # of concurrent loads = ceil (latency / max. cycles per load) = ceil (77 / 24) = 4
+
+*** When every load misses L1
+
+We need enough to match L1 fill bandwidth = 2.
+
+*** When every load hits L1
+
+We should be able to complete at least 1 load per cycle.
+
+Ideal # of concurrent loads = ceil (latency / max. cycles per load) = ceil (3 / 1) = 3
