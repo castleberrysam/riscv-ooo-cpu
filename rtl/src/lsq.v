@@ -297,13 +297,13 @@ module lsq #(
     .d(lq_op2_next),
     .q(lq_op2));
 
-  // For LBMP only, op2 is immediately ready at dispatch time
+  // op2 is only used by LBCMP
   flop lq_op2_rdy_r[15:0](
     .clk(clk),
     .rst(1'b0),
     .set(lq_op2_fwd_en),
     .enable(lq_insert_en),
-    .d((~&rename_op.funct3[1:0]) | rename_op2ready),
+    .d((rename_op.funct3 != FUNCT3_LS_LBCMP) | rename_op2ready),
     .q(lq_op2_rdy));
 
   // lq_addr
