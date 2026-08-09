@@ -18,6 +18,7 @@ module btb #(
   output [31:2] btb_brpred_target,
 
   // rob interface
+  (* unused *)
   input         rob_flush,
   input         rob_ret_branch,
   input         rob_ret_bptaken,
@@ -172,7 +173,7 @@ module btb #(
 
   genvar i;
   generate
-    for(i = 0; i < BTB_NUM_WAYS; i=i+1) begin
+    for(i = 0; i < BTB_NUM_WAYS; i=i+1) begin: gen_rd
       assign {rd_way_target[i*TGT_WIDTH+:TGT_WIDTH],
               rd_way_tag[i*TAG_WIDTH+:TAG_WIDTH],
               rd_way_attr[i*ATTR_WIDTH+:ATTR_WIDTH],
@@ -186,10 +187,10 @@ module btb #(
   assign rd_lru = rd_data[BTB_NUM_WAYS*WAY_WIDTH+:LRU_WIDTH];
 
   generate
-    if(BTB_NUM_WAYS == 2) begin
+    if(BTB_NUM_WAYS == 2) begin: gen_lru
       assign lru_vic_way = rd_lru ? 2'b10 : 2'b01;
       assign lru_nxt = hit_way[0];
-    end else if(BTB_NUM_WAYS == 4) begin
+    end else if(BTB_NUM_WAYS == 4) begin: gen_lru
       assign lru_vic_way = rd_lru[2] ? (rd_lru[1] ? 4'b1000 : 4'b0100) :
                                        (rd_lru[0] ? 4'b0010 : 4'b0001);
       wire [BTB_NUM_WAYS-2:0] lru_set, lru_rst;
@@ -223,7 +224,7 @@ module btb #(
 
   genvar j;
   generate
-    for(j = 0; j < BTB_NUM_WAYS; j=j+1) begin
+    for(j = 0; j < BTB_NUM_WAYS; j=j+1) begin: gen_wr_data
       assign alloc_wr_data[j*WAY_WIDTH+:WAY_WIDTH] = alloc_way[j] ? alloc_way_wr_data :
                                                                     rd_data[j*WAY_WIDTH+:WAY_WIDTH];
       assign uncond_update_wr_data[j*WAY_WIDTH+:WAY_WIDTH] =

@@ -73,6 +73,7 @@ module decode #(
     ERR_IILLEGAL = 2'b10;
 
 
+  (* maybe_unused *)
   localparam
     OPC_LOAD      = 5'b00000,
     OPC_LOADFP    = 5'b00001,
@@ -263,10 +264,10 @@ module decode #(
 
   always @(*) begin
     rsop = '0;
-    if(rsop_ls_en) rsop |= rsop_ls;
-    if(rsop_br_en) rsop |= rsop_br;
-    if(rsop_csr_en) rsop |= rsop_csr;
-    if(rsop_alu_en) rsop |= rsop_alu;
+    if(rsop_ls_en) rsop |= rsop_t'(rsop_ls);
+    if(rsop_br_en) rsop |= rsop_t'(rsop_br);
+    if(rsop_csr_en) rsop |= rsop_t'(rsop_csr);
+    if(rsop_alu_en) rsop |= rsop_t'(rsop_alu);
   end
 
 `ifndef SYNTHESIS

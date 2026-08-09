@@ -1,3 +1,5 @@
+`include "buscmd.vh"
+
 // l2 bus transmitter
 module l2trans #(
   parameter BUSID = `BUSID_L2

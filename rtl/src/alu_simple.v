@@ -6,7 +6,7 @@ module alu_simple(
   input rsop_alu_t  op,
   input [31:0]      op1,
   input [31:0]      op2,
-  output [31:0] sc_result);
+  output reg [31:0] sc_result);
 
   wire [31:0] p_vector;
   wire p_vec_zero;
@@ -45,7 +45,7 @@ module alu_simple(
 
   always @(*)
     if (op.aluext)
-      case (op.funct3)
+      case (funct3_aluext_t'(op.aluext))
         FUNCT3_ALUEXT_PFIND: sc_result = pfind_res;
         FUNCT3_ALUEXT_PCLEAR: sc_result = pclear_res;
         default: sc_result = '0;

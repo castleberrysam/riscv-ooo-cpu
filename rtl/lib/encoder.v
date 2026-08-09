@@ -10,14 +10,14 @@ module encoder #(
   /*verilator lint_off WIDTH*/
   wire [(BITS>>1)-1:0] encode_bits [$clog2(BITS)-1:0];
   genvar i;
-  genvar k;
   generate
     for (i = 0; i < BITS; i=i+1) begin : enc_outer
       genvar j;
       for (j = 0; j < $clog2(BITS); j=j+1) begin : enc_inner
         localparam k = ((i >> (j+1)) << j) | (i & ((1 << j)-1));
-        if ((i >> j) & 1) 
+        if ((i >> j) & 1) begin: enc_inner_assign
           assign encode_bits[j][k] = in[i];
+        end
       end
     end
     for (i = 0; i < $clog2(BITS); i=i+1) begin : enc_assign

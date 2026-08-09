@@ -121,23 +121,23 @@ module tb_top();
   end
 
   // standard fds
-  localparam STDOUT = 32'h80000001;
-  localparam STDERR = 32'h80000002;
+  localparam STDOUT = 32'sh80000001;
+  localparam STDERR = 32'sh80000002;
 
   // memory map constants
-  localparam
+  localparam unsigned
     ROM_BASE   = 32'h10000000/4,
     ROM_SIZE   = (16*1024*1024)/4,
     DBG_TOHOST = 32'h30000000/4;
 
   task automatic openargfile(
-    input [16*8-1:0] argname,
-    input [3*8-1:0]  mode,
-    output integer   fd,
-    input integer    defaultfd);
+    input string argname,
+    input string mode,
+    output integer fd,
+    input integer defaultfd);
 
-    reg [19*8-1:0]  argstr;
-    reg [128*8-1:0] argfile;
+    string argstr;
+    string argfile;
     begin
       fd = defaultfd;
       $swrite(argstr, "%0s=%%s", argname);
@@ -153,8 +153,9 @@ module tb_top();
 
   reg [31:0] mem_rom [0:ROM_SIZE-1];
 
-  reg [128*8-1:0] memfile;
-  integer         i, memfd;
+  string memfile;
+  integer unsigned i;
+  integer memfd;
   initial begin
     for(i = 0; i < ROM_SIZE; i=i+1)
       mem_rom[i] = 0;
@@ -171,8 +172,7 @@ module tb_top();
     end
   end
 
-  reg [128*8-1:0] uartfile;
-  integer         uartfd;
+  integer uartfd;
   initial
     openargfile("uartfile", "w", uartfd, STDOUT);
 
@@ -244,6 +244,7 @@ module tb_top();
 
   task tb_trace_decode(
     input [ROBID_MSB:0] robid,
+    (* unused *)
     input [4:0]         rsop,
     input [31:0]        insn,
     input [31:0]        imm);
@@ -271,6 +272,16 @@ module tb_top();
       trace_memop[robid] = op;
       trace_membase[robid] = base;
       trace_memdata[robid] = wdata;
+    end
+  endtask
+
+  task tb_trace_lsq_stall(
+    (* unused *) input lq_stall_addr,
+    (* unused *) input lq_stall_sq_no_addr,
+    (* unused *) input lq_stall_sq_same_addr);
+
+    begin
+      // TODO
     end
   endtask
 
@@ -378,7 +389,7 @@ module tb_top();
       trace_rob_inflight = trace_rob_inflight - 1;
 
       memaddr = trace_membase[robid] + trace_imm[robid];
-      if(tracefd) begin
+      if(tracefd != 0) begin
         $fwrite(tracefd, "core   0: 3 0x%x (0x%x)", {addr,2'b0}, trace_insn[robid]);
         if(error)
           $fwrite(tracefd, " error %0d", ecause);
@@ -406,12 +417,12 @@ module tb_top();
           end
           if(trace_writes_csr[robid])
             $fwrite(tracefd, " c%0d_%0s 0x%x", trace_membase[robid],
-              csr_name(trace_membase[robid]), trace_memdata[robid]);
+              csr_name(trace_membase[robid][11:0]), trace_memdata[robid]);
         end
         $fdisplay(tracefd);
       end
 
-      if(logfd) begin
+      if(logfd != 0) begin
         $fwrite(logfd, "%0d ret %x", $stime, {addr,2'b0});
         if(~rd[5])
           $fwrite(logfd, " x%0d=%x", rd[4:0], result);
@@ -478,11 +489,11 @@ module tb_top();
   endtask
 
   task tb_trace_wb_stall(
-    input wb_stall_scalu0,
-    input wb_stall_scalu1,
-    input wb_stall_mcalu0,
-    input wb_stall_mcalu1,
-    input wb_stall_lsq);
+    (* unused *) input wb_stall_scalu0,
+    (* unused *) input wb_stall_scalu1,
+    (* unused *) input wb_stall_mcalu0,
+    (* unused *) input wb_stall_mcalu1,
+    (* unused *) input wb_stall_lsq);
 
     begin
       // TOOD
@@ -490,13 +501,13 @@ module tb_top();
   endtask
 
   task tb_trace_dcache(
-    input dc_req_write,
-    input dc_req_hit,
-    input dc_req_rd_fwd,
-    input dc_req_rd_merge,
-    input dc_req_wr_merge,
-    input dc_req_alloc_mshr,
-    input dc_req_hit_mshr);
+    (* unused *) input dc_req_write,
+    (* unused *) input dc_req_hit,
+    (* unused *) input dc_req_rd_fwd,
+    (* unused *) input dc_req_rd_merge,
+    (* unused *) input dc_req_wr_merge,
+    (* unused *) input dc_req_alloc_mshr,
+    (* unused *) input dc_req_hit_mshr);
 
     begin
       // TODO
@@ -550,7 +561,7 @@ module tb_top();
     input [31:0] wdata);
 
     reg [5*8-1:0] mnemonic;
-    if(logfd) begin
+    if(logfd != 0) begin
       casez(op)
         4'b000_0: mnemonic = "lb";
         4'b001_0: mnemonic = "lh";
@@ -580,7 +591,7 @@ module tb_top();
     input        error,
     input [31:0] rdata);
 
-    if(logfd) begin
+    if(logfd != 0) begin
       $fwrite(logfd, "%0d resp %0d", $stime, lsqid);
       if(error)
         $fwrite(logfd, " error");
@@ -593,7 +604,7 @@ module tb_top();
   task tb_log_rob_flush();
     begin
       trace_rob_inflight = 0;
-      if(logfd)
+      if(logfd != 0)
         $fdisplay(logfd, "%0d flush", $stime);
     end
   endtask
@@ -604,7 +615,7 @@ module tb_top();
     input [2:0]  index,
     input [63:0] data);
 
-    if(logfd)
+    if(logfd != 0)
       bus_data[index] = data;
   endtask
 
@@ -617,7 +628,7 @@ module tb_top();
 
     integer       i;
     reg [7*8-1:0] cmd_name;
-    if(logfd) begin
+    if(logfd != 0) begin
       case(cmd)
         `CMD_BUSRD: cmd_name = "BusRd";
         `CMD_BUSRDX: cmd_name = "BusRdX";

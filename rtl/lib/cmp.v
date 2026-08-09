@@ -10,9 +10,9 @@ module cmp #(
 
   genvar i;
   generate
-    if(GROUP < WIDTH) begin
+    if(GROUP < WIDTH) begin: gen_group
       wire [WIDTH/GROUP-1:0] group_eq, group_lt;
-      for(i = 0; i < WIDTH/GROUP; i=i+1) begin
+      for(i = 0; i < WIDTH/GROUP; i=i+1) begin: gen_inst
         cmp #(GROUP,GROUP,0) u_group (
           .a(a[i*GROUP+:GROUP]),
           .b(b[i*GROUP+:GROUP]),
@@ -21,7 +21,7 @@ module cmp #(
       end
 
       wire [WIDTH/GROUP-1:0] group_all_eq;
-      for(i = 0; i < WIDTH/GROUP; i=i+1) begin
+      for(i = 0; i < WIDTH/GROUP; i=i+1) begin: gen_group_all_eq
         assign group_all_eq[i] = (&group_eq[WIDTH/GROUP-1:i]);
       end
 
@@ -30,11 +30,12 @@ module cmp #(
       assign lt_base = group_lt[WIDTH/GROUP-1] |
                        (|( group_lt[WIDTH/GROUP-2:0] &
                            group_all_eq[WIDTH/GROUP-1:1] ));
-      if(SIGNED)
+      if(SIGNED) begin: gen_signed
         assign lt = lt_base ^ a[WIDTH-1] ^ b[WIDTH-1];
-      else
+      end else begin: gen_unsigned
         assign lt = lt_base;
-    end else begin
+      end
+    end else begin: gen_nogroup
       assign eq = (a == b);
       assign lt = (a < b);
     end

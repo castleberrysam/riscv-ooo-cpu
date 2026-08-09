@@ -95,7 +95,7 @@ module fetch #(
 
   genvar i;
   generate
-    for(i = 0; i < FQ_SIZE; i=i+1) begin
+    for(i = 0; i < FQ_SIZE; i=i+1) begin: gen_fq_bp
       dff #(30)           u_fq_addr_r    (fq_addr_r[i*30+:30],   brpred_fetch_addr,    clk, fq_tail_wen[i]);
       dff #(30)           u_fq_target_r  (fq_target_r[i*30+:30], brpred_fetch_target,  clk, fq_tail_wen[i]);
       dff                 u_fq_bptaken_r (fq_bptaken_r[i],       brpred_fetch_bptaken, clk, fq_tail_wen[i]);
@@ -117,7 +117,7 @@ module fetch #(
 
   genvar j;
   generate
-    for(j = 0; j < FQ_SIZE; j=j+1) begin
+    for(j = 0; j < FQ_SIZE; j=j+1) begin: gen_fq_insn
       dff #(32) u_fq_insn_r  (fq_insn_r[j*32+:32], icache_data,  clk, fq_mid_wen[j]);
       dff       u_fq_error_r (fq_error_r[j],       icache_error, clk, fq_mid_wen[j]);
     end

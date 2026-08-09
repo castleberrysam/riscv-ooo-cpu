@@ -1,0 +1,19 @@
+[[waivers]]
+file = "**"
+diagnostic = ["empty-output-connection", "bitwise-op-parentheses", "case-default", "width-expand", "arith-op-mismatch"]
+
+[[waivers]]
+file = "**/sim/ddr3.v"
+diagnostic = ["unused-port", "undriven-port"]
+
+[[waivers]]
+file = "**/sim/tb_top.v"
+diagnostic = ["unknown-sys-name"]
+
+[[waivers]]
+file = "**/sim/dram_ctl.v"
+diagnostic = ["unused-parameter", "unknown-sys-name", "unassigned-variable", "unused-variable", "unused-but-set-variable", "unused-port", "undriven-port"]
+
+[[waivers]]
+file = "**/rtl/src/decode.vh"
+diagnostic = ["unused-typedef"]

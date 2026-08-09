@@ -10,7 +10,7 @@ module csr #(
 
   // rename interface
   input                rename_csr_write,
-  input rsop_csr_t     rename_op,
+  input rsop_t         rename_op,
   input [ROBID_MSB:0]  rename_robid,
   input [5:0]          rename_rd,
   input [31:0]         rename_op1,
@@ -26,12 +26,17 @@ module csr #(
   output [31:0]        csr_result,
 
   // rob interface
+  (* unused *)
   input                rob_flush,
   input                rob_ret_valid,
   input                rob_ret_csr,
+  (* unused *)
   input                rob_csr_valid,
+  (* unused *)
   input [31:2]         rob_csr_epc,
+  (* unused *)
   input [4:0]          rob_csr_ecause,
+  (* unused *)
   input [31:0]         rob_csr_tval,
   output [31:2]        csr_tvec,
 
@@ -47,6 +52,7 @@ module csr #(
   // l2fifo interface
   input                l2fifo_l2_req);
 
+  (* maybe_unused *)
   localparam
     MTVEC     = 12'h305,
     MCYCLE    = 12'hB00,
@@ -68,6 +74,7 @@ module csr #(
     ML2STAT   = 12'h7E0;
 
   // uart status bits
+  (* maybe_unused *)
   localparam
     MUARTSTAT_RXEMPTY = 32'h00000001,
     MUARTSTAT_RXFULL  = 32'h00000002,
@@ -103,7 +110,7 @@ module csr #(
   wire stage_en = ~csr_stall & rename_csr_write;
 
   flop #($bits(csrop_t)) op_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
-      .d(rename_op.csrop), .q(op));
+      .d(rename_op.csr.csrop), .q(op));
   flop #(ROBID_MSB+1) robid_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),
       .d(rename_robid), .q(robid));
   flop #(6) rd_flop (.clk(clk), .set(1'b0), .rst(1'b0), .enable(stage_en),

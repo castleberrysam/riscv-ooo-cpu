@@ -1,3 +1,5 @@
+`include "buscmd.vh"
+
 // l2 data store
 module l2data(
   input         clk,
@@ -53,6 +55,7 @@ module l2data(
   output        l2data_idle);
 
   // one-hot signal to index
+  (* unused *)
   function automatic [8:0] addr2set(
     input [31:6] addr);
 

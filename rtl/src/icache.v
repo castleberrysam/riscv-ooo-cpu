@@ -12,8 +12,6 @@ module icache(
   output        icache_error,
   output [31:0] icache_data);
 
-  localparam STDERR = 32'h80000002;
-
   reg        req_s0, req_s1;
   reg [31:2] addr_s0;
   reg [31:0] rdata_raw, rdata_s1;

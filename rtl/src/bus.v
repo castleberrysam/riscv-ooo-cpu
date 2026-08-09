@@ -53,10 +53,10 @@ module bus(
   output reg [63:0] bus_data);
 
   // positive amount = left shift
-  function integer rotate(
-    input integer in,
-    input integer amount,
-    input integer width);
+  function integer unsigned rotate(
+    input integer unsigned in,
+    input integer unsigned amount,
+    input integer unsigned width);
 
     if(amount > 0)
       rotate = (in << amount) | (in >> (width - amount));
@@ -90,8 +90,8 @@ module bus(
   /*verilator lint_off WIDTH*/
   wire [1:0] reqs_rot;
   wire [3:0] resps_rot;
-  assign reqs_rot = rotate(reqs, req_pri_r, 2);
-  assign resps_rot = rotate(resps, resp_pri_r, 4);
+  assign reqs_rot = rotate(reqs, req_pri_r, 2)[1:0];
+  assign resps_rot = rotate(resps, resp_pri_r, 4)[3:0];
   /*verilator lint_on WIDTH*/
 
   wire       reqarb_valid, resparb_valid;
@@ -109,8 +109,8 @@ module bus(
   /*verilator lint_off WIDTH*/
   wire [1:0] reqarb_rot;
   wire [3:0] resparb_rot;
-  assign reqarb_rot = rotate(reqarb_out, -req_pri_r, 2);
-  assign resparb_rot = rotate(resparb_out, -resp_pri_r, 4);
+  assign reqarb_rot = rotate(reqarb_out, -req_pri_r, 2)[1:0];
+  assign resparb_rot = rotate(resparb_out, -resp_pri_r, 4)[3:0];
   /*verilator lint_on WIDTH*/
 
   reg [3:0] arb_out;
@@ -129,11 +129,12 @@ module bus(
     if(rst) begin
       req_pri_r <= 0;
       resp_pri_r <= 0;
-    end else if(bus_cycle_r == 7)
+    end else if(bus_cycle_r == 7) begin
       if(resparb_valid)
         resp_pri_r <= resp_pri_r + 1;
       else if(reqarb_valid)
         req_pri_r <= req_pri_r + 1;
+    end
 
   reg l2_grant_r, bfs_grant_r, dramctl_grant_r, rom_grant_r;
   always @(posedge clk)

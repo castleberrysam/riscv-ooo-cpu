@@ -2,7 +2,7 @@
 module fifo #(
   parameter WIDTH = 8,
   parameter DEPTH = 8,
-  parameter FWD_READ = 0
+  parameter bit FWD_READ = 0
   )(
   input              clk,
   input              rst,

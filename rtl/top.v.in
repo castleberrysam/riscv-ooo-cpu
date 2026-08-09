@@ -35,10 +35,6 @@ module top(
   wire        bfs_bus_hit;
   wire        bfs_bus_nack;
 
-  wire [32:2] bfsl2_req_addr;
-  wire [7:0]  bfsl2_req_wmask;
-  wire [63:0] bfsl2_req_wdata;
-
   wire        dc_valid;
   wire [1:0]  dc_op;
   wire [31:6] dc_addr;

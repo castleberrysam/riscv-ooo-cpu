@@ -18,6 +18,7 @@ module queue_main #(
   reg [31:0]      buf_addr0[Q_SIZE-1:0];
   reg [31:0]      buf_addr1[Q_SIZE-1:0];
   reg [Q_SIZE-1:0] buf_valid0;
+  (* unused *)
   reg [Q_SIZE-1:0] buf_valid1;
 
   wire [$clog2(Q_SIZE):0]  buf_head_next, buf_tail_next;

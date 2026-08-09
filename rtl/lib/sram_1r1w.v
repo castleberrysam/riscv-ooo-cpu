@@ -17,20 +17,20 @@ module sram_1r1w #(
   reg [DATAW-1:0] mem [0:(1<<ADDRW)-1];
 
   generate
-    if(DELAY == 2) begin
+    if(DELAY == 2) begin: gen_rd
       reg             rd_en_r;
       reg [ADDRW-1:0] rd_addr_r;
-      reg [DATAW-1:0] rd_data_r;
       always @(posedge rd_clk) begin
         rd_en_r <= rd_en;
         rd_addr_r <= rd_addr;
         if(rd_en_r)
           rd_data <= mem[rd_addr_r];
       end
-    end else
+    end else begin: gen_rd
       always @(posedge rd_clk)
         if(rd_en)
           rd_data <= mem[rd_addr];
+    end
   endgenerate
 
   always @(posedge wr_clk)

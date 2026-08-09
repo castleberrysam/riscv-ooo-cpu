@@ -7,7 +7,8 @@ SRCS := $(shell realpath $(CURDIR)/../sim/timescale)
 SRCS += $(filter-out $(CURDIR)/src/dram_ctl%.v,$(wildcard $(CURDIR)/src/*.v))
 SRCS += $(wildcard $(CURDIR)/lib/*.v)
 SRCS += $(CURDIR)/src/bfs/bfs_core.v $(CURDIR)/src/bfs/bfs_queue.v $(CURDIR)/src/bfs/queue_main.v $(CURDIR)/src/bfs/queue_out.v
-SRCS += $(shell realpath $(CURDIR)/../sim/tb_top.v)
+SRCS_TOP := $(shell realpath $(CURDIR)/../sim/tb_top.v)
+SRCS += $(SRCS_TOP)
 
 AUTO_SRCS := $(wildcard *.v.in)
 AUTO_OUT := $(patsubst %,$(CURDIR)/%,$(AUTO_SRCS:%.v.in=build/%.v))
@@ -55,10 +56,10 @@ $(error Only dramsim is supported with simulator $(SIM))
 endif
 
 INCLUDES_ARG := $(patsubst %,-y %,$(INCLUDES))
-DEFINES := $(patsubst %,-D %,$(DEFINES))
+DEFINES_ARG := $(patsubst %,-D %,$(DEFINES))
 
 build/top: $(SRCS) $(INCLUDES) $(AUTO_OUT) $(EXTRA_DEPS)
-	$(VCS) $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	$(VCS) $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES_ARG) $(SRCS) $(AUTO_OUT)
 else ifeq ($(SIM),verilator)
 VERILATOR ?= verilator
 
@@ -79,14 +80,14 @@ $(error Only dramsim is supported with simulator $(SIM))
 endif
 
 INCLUDES_ARG := $(patsubst %,-y %,$(INCLUDES))
-DEFINES := $(patsubst %,+define+%,$(DEFINES))
+DEFINES_ARG := $(patsubst %,+define+%,$(DEFINES))
 
 build/top: $(SRCS) $(INCLUDES) $(AUTO_OUT) $(EXTRA_DEPS)
-	$(VERILATOR) --cc --exe $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	$(VERILATOR) --cc --exe $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES_ARG) $(SRCS) $(AUTO_OUT)
 	$(MAKE) -C build -f Vtb_top.mk OPT_SLOW=-O2 OPT_FAST=-O3 OPT_GLOBAL=-O3
 
 build/top.tree.json build/top.tree.meta.json: $(SRCS) $(INCLUDES) $(AUTO_OUT)
-	$(VERILATOR) --json-only --json-only-output build/top.tree.json --json-only-meta-output build/top.tree.meta.json $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	$(VERILATOR) --json-only --json-only-output build/top.tree.json --json-only-meta-output build/top.tree.meta.json $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES_ARG) $(SRCS) $(AUTO_OUT)
 
 JSON2STEMS ?= json2stems
 
@@ -113,10 +114,10 @@ $(error Only dramsim is supported with simulator $(SIM))
 endif
 
 INCLUDES_ARG := $(patsubst %,-y %,$(INCLUDES)) $(patsubst %,-I %,$(INCLUDES))
-DEFINES := $(patsubst %,-D %,$(DEFINES))
+DEFINES_ARG := $(patsubst %,-D %,$(DEFINES))
 
 build/top: $(SRCS) $(INCLUDES) $(AUTO_OUT) $(EXTRA_DEPS)
-	$(IVERILOG) $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	$(IVERILOG) $(SIMOPTS) $(INCLUDES_ARG) $(DEFINES_ARG) $(SRCS) $(AUTO_OUT)
 else ifeq ($(SIM),xsim)
 XSIM ?= xsim
 
@@ -132,15 +133,15 @@ $(error Only Xilinx MIG is supported with simulator $(SIM))
 endif
 
 INCLUDES_ARG := $(patsubst %,--include %,$(INCLUDES))
-DEFINES := $(patsubst %,-d %,$(DEFINES))
+DEFINES_ARG := $(patsubst %,-d %,$(DEFINES))
 
 build/top: build/xsim.dir/work/work.rlx build/xsim.dir/dram_mig/dram_mig.rlx build/xsim.dir/glbl/glbl.rlx | build
-	cd build && xelab --relax -a $(DEFINES) $(LIBS) -L dram_mig tb_top glbl.glbl
+	cd build && xelab --relax -a $(DEFINES_ARG) $(LIBS) -L dram_mig tb_top glbl.glbl
 	mv build/axsim.sh build/top
 	sed -i -e '5i cd "$${BASH_SOURCE%/*}"' build/top
 
 build/xsim.dir/work/work.rlx: $(SRCS) $(INCLUDES) $(AUTO_OUT) $(HDRS) | build
-	cd build && xvlog --relax --sv $(INCLUDES_ARG) $(DEFINES) $(SRCS) $(AUTO_OUT)
+	cd build && xvlog --relax --sv $(INCLUDES_ARG) $(DEFINES_ARG) $(SRCS) $(AUTO_OUT)
 
 $(MIG):
 	make -C ../impl dram_mig
@@ -154,9 +155,18 @@ else
 $(error Unknown simulator $(SIM))
 endif
 
+VLIB := src src/bfs lib build ../sim
+
+build/slang.f: slang.f.in
+	@cp -a $< $@
+	@printf '%s\n' $(foreach inc,$(INCLUDES),'+incdir+$(inc)') >> $@
+	@printf '%s\n' $(foreach def,$(DEFINES),'+define+$(def)') >> $@
+	@printf '%s\n' $(foreach lib,$(VLIB),'-y $(shell realpath $(CURDIR)/$(lib))') >> $@
+	@printf '%s\n' $(foreach src,$(SRCS_TOP),'$(src)') >> $@
+
 .PHONY: all clean
 
-all: build/top
+all: build/top build/slang.f
 
 $(CURDIR)/build/%.v: $(CURDIR)/%.v.in $(SRCS) | build
 	./auto.sh $<

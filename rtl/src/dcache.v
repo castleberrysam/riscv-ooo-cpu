@@ -25,6 +25,7 @@ module dcache(
   input         l2fifo_dc_ready,
 
   input         l2_resp_valid,
+  (* unused *)
   input         l2_resp_error,
   input [63:0]  l2_resp_rdata,
   output        resp_ready,
@@ -203,6 +204,7 @@ module dcache(
   reg [31:0] s2_rdata_extended;
 
   // derived signals
+  (* unused *)
   wire l2_req_beat;
   assign l2_req_beat = dcache_l2fifo_req & l2fifo_dc_ready;
 
@@ -295,7 +297,7 @@ module dcache(
     s0_rd_merge = 0;
     s0_rd_forward = 0;
     // check mshr_wen since we can't forward/merge the read if there is pending wdata
-    if(~s0_op_r[0] & s0_mshrhit & ~mshr_wen)
+    if(~s0_op_r[0] & s0_mshrhit & ~mshr_wen) begin
       // is there pending rdata in the rbuf for this addr?
       if(rbuf_valid[s0_addr_r[5:3]])
         // forward the data from the rbuf
@@ -304,6 +306,7 @@ module dcache(
         // merge into the mshr if the slot is free and there hasn't been a flush
         s0_rd_merge = ~l2_resp_valid & ~rbuf_started & ~mshr_req_valid[s0_addr_r[5:2]] &
                       ~mshr_obsolete & ~s0_burst;
+    end
 
     // can we merge a write?
     s0_wr_merge = ~s0_inv_r & s0_op_r[0] & s0_mshrhit & ~rbuf_filled[s0_addr_r[5:3]];
@@ -337,20 +340,21 @@ module dcache(
   // s0_stall
   always @(*) begin
     s0_stall = 0;
-    if(s0_req_r)
+    if(s0_req_r) begin
       if(s0_burst & ~s0_last)
         s0_stall = pma_valid;
       else if(s0_inv_r)
         s0_stall = s0_mshrhit;
-      else if(~s0_op_r[0])
+      else if(~s0_op_r[0]) begin
         if(s0_mshrhit)
           s0_stall = (~s0_rd_forward | s1_stall) & ~s0_rd_merge;
         else if(s0_tagmiss)
           s0_stall = pma_valid & (~l2fifo_dc_ready | mshr_valid);
         else
           s0_stall = s1_stall;
-      else
+      end else
         s0_stall = ~l2fifo_dc_ready | (s0_mshrhit & ~s0_wr_merge);
+    end
   end
 
   assign s0_op = s0_burst ? {s0_last,2'b11} : s0_op_r[3:1];
@@ -490,9 +494,9 @@ module dcache(
     s2_rdata_aligned = s2_rdata_muxed >> (s2_offset_r[1:0] * 8);
     casez(s2_op_r)
       3'b000: // LB
-        s2_rdata_extended = $signed(s2_rdata_aligned[7:0]);
+        s2_rdata_extended = {{24{s2_rdata_aligned[7]}}, s2_rdata_aligned[7:0]};
       3'b001: // LH
-        s2_rdata_extended = $signed(s2_rdata_aligned[15:0]);
+        s2_rdata_extended = {{16{s2_rdata_aligned[15]}}, s2_rdata_aligned[15:0]};
       3'b01?: // LW
         s2_rdata_extended = s2_rdata_aligned;
       3'b1?0: // LBU

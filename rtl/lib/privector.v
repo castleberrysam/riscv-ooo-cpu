@@ -14,10 +14,10 @@ module privector #(
 
   genvar i;     // out = prop' . bit
   generate
-    if (SEARCH_BIT) begin
+    if (SEARCH_BIT) begin: gen_search1
       assign partial_out[0] = in;
       assign found[0] = in;
-    end else begin
+    end else begin: gen_search0
       assign partial_out[0] = ~in;
       assign found[0] = ~in;
     end
@@ -27,15 +27,14 @@ module privector #(
   generate
     for (i = 0; i < $clog2(BITS); i = i + 1) begin : prienc_outer
       genvar j;
-      localparam base_prop = BITS - (1 << i); 
       localparam bit_mask = 1 << i;
       for (j = 0; j < BITS; j = j + 1) begin : prienc_inner
         localparam prop_idx = ((j >> i) << i) | bit_mask; 
-        if (~j & bit_mask) begin
+        if (~j & bit_mask) begin: gen_merge
           // Merge Cell
           assign partial_out[i+1][B-j] = ~found[i][B-prop_idx] & partial_out[i][B-j];
           assign found[i+1][B-j] = found[i][B-prop_idx] | found[i][B-j];
-        end else begin 
+        end else begin: gen_pass
           // Pass-through cell
           assign partial_out[i+1][B-j] = partial_out[i][B-j];
           assign found[i+1][B-j] = found[i][B-j];

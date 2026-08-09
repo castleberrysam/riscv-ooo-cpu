@@ -65,7 +65,6 @@ module rename #(
 
   // decode signals
   wire               valid;
-  wire               stall;
   wire [ROBID_MSB:0] robid;
   wire [31:0]        addr;
   rsop_t             op;

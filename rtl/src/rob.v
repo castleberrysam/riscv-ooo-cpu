@@ -197,7 +197,7 @@ module rob #(
 
   genvar i;
   generate
-    for (i = 0; i < ROB_SIZE; i = i + 1) begin
+    for (i = 0; i < ROB_SIZE; i = i + 1) begin: gen_buf
       // dual write
       flop buf_executed_flop(clk, 0, 0, buf_tail_en[i] | wb_robid_en[i],
         buf_tail_en[i] & (decode_error | decode_retop.store) | wb_robid_en[i], buf_executed[i]);
@@ -235,7 +235,7 @@ module rob #(
   wire        read_forwarded;
   premux #(1,  ROB_SIZE) buf_executed_mux(ret_rd_addr_splat, buf_executed, read_executed);
   premux #(1,  ROB_SIZE) buf_error_mux(ret_rd_addr_splat, buf_error, read_error);
-  premux #($bits(retop_t), ROB_SIZE) buf_retop_mux(ret_rd_addr_splat, buf_retop, read_retop);
+  assign read_retop = buf_retop[ret_rd_addr];
   premux #(30, ROB_SIZE) buf_addr_mux(ret_rd_addr_splat, buf_addr, read_addr);
   premux #(6,  ROB_SIZE) buf_rd_mux(ret_rd_addr_splat, buf_rd, read_rd);
   premux #(5,  ROB_SIZE) buf_ecause_mux(ret_rd_addr_splat, buf_ecause, read_ecause);

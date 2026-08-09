@@ -1,3 +1,5 @@
+`include "buscmd.vh"
+
 // l2 bus receiver
 module l2tag #(
   parameter BUSID = `BUSID_L2
@@ -15,6 +17,7 @@ module l2tag #(
 
   // bus interface (in)
   input            bus_valid,
+  (* unused *)
   input            bus_nack,
   input [2:0]      bus_cmd,
   input [4:0]      bus_tag,
@@ -395,7 +398,7 @@ module l2tag #(
     end
 
   always @(posedge clk)
-    if(~s1_req_noop_r)
+    if(~s1_req_noop_r) begin
       if(s1_req_valid_r & ~s1_req_tag_stale_r) begin
         s1_req_tagmem_way_r <= (tagmiss & s1_req_overwrite) ? fill_way : tagmem_way_r;
         s1_req_tagmem_state_r <= tagmem_way_state;
@@ -406,6 +409,7 @@ module l2tag #(
         s1_req_tagmem_way_r <= s1_req_fill_way_r;
         s1_req_tagmem_state_r <= s1_req_wen ? `STATE_M : `STATE_F;
       end
+    end
 
   always @(posedge clk) begin
     // reset state machine when we start processing a new request
@@ -421,7 +425,7 @@ module l2tag #(
     end
 
     // check confirmations from l2trans
-    if(l2trans_valid)
+    if(l2trans_valid) begin
       if(s1_req_evict_r)
         // we got the confirm for a Flush (eviction), now that we have an open
         // storage space, handle like a normal miss (issue a BusRd/BusRdX)
@@ -432,6 +436,7 @@ module l2tag #(
       else
         // we got the confirmation for a BusRd/BusRdX, do nothing
         ;
+    end
 
     // did we get the response to a BusRd/BusRdX?
     if(fill)

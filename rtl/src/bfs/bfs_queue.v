@@ -49,6 +49,7 @@ module bfs_queue #(
   wire [63:0] outq_deq_data;
   wire        outq_filled;
   wire       outq_sat;
+  (* unused *)
   wire       outq_full;
   wire       outq_empty;
 
@@ -104,6 +105,7 @@ module bfs_queue #(
   reg[2:0] qstate, next_qstate;
   reg[2:0] ct, next_ct;
 
+  (* unused *)
   wire restore_valid;
   assign restore_valid = dc_valid & (dc_op == `OP_RD);
 

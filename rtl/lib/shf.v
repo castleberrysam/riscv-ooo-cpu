@@ -3,7 +3,7 @@
 /* verilator lint_off UNOPTFLAT */
 module shf #(
   parameter W = 32,
-  parameter RIGHT = 1
+  parameter bit RIGHT = 1
   )(
   input                  sgn,
   input [W-1:0]          a,
@@ -18,7 +18,7 @@ module shf #(
 
   genvar i;
   generate
-    if (RIGHT)
+    if (RIGHT) begin: gen_right
       for (i = 0; i < B; i = i + 1) begin : rshf_outer
         wire [W-1:0] shf_i;
         mux #(32, 2) rshf_mux (.sel(b[i]),
@@ -26,7 +26,7 @@ module shf #(
             .out(shf_i));
         assign shf_acc[i+1] = {oz , shf_i, {W{1'b0}}};
       end
-    else
+    end else begin: gen_left
       for (i = 0; i < B; i = i + 1) begin : lshf_outer
         wire [W-1:0] shf_i;
         mux #(32, 2) lshf_mux (.sel(b[i]),
@@ -34,6 +34,7 @@ module shf #(
             .out(shf_i));
         assign shf_acc[i+1] = {oz, shf_i, {W{1'b0}}};
       end
+    end
   endgenerate
   
   assign c = shf_acc[B][W+:W]; 

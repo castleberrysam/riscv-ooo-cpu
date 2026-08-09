@@ -63,10 +63,13 @@ module bfs_core (
 
   wire deq_req;
   wire [31:0] deq_data;
-  wire q_full, rq_empty;
+  (* unused *)
+  wire q_full;
+  wire rq_empty;
   wire pend_empty;
   wire spill_req;
   wire spill_done;
+  (* unused *)
   wire spill_init;
   wire spill_op;
   wire [63:0] spill_data;

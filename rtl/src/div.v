@@ -1,3 +1,5 @@
+`include "rtldefs.vh"
+
 // 32 x 32 divider
 module div(
   input         clk,

@@ -12,6 +12,7 @@ module rom(
   input [2:0]       bus_cmd,
   input [4:0]       bus_tag,
   input [31:6]      bus_addr,
+  (* unused *)
   input [63:0]      bus_data,
 
   output reg        rom_bus_req,
@@ -23,7 +24,7 @@ module rom(
   input             bus_rom_grant);
 
   // memory map constants
-  localparam
+  localparam unsigned
     ROM_BASE = 32'h10000000/4,
     ROM_SIZE = (16*1024*1024)/4;
 

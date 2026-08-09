@@ -9,7 +9,7 @@ module lsq #(
 
   // rename interface
   input                rename_lsq_write,
-  input rsop_ls_t      rename_op,
+  input rsop_t         rename_op,
   input [ROBID_MSB:0]  rename_robid,
   input [5:0]          rename_rd,
   input                rename_op1ready,
@@ -45,6 +45,7 @@ module lsq #(
   input                wb_valid,
   input                wb_error,
   input [ROBID_MSB:0]  wb_robid,
+  (* unused *)
   input [5:0]          wb_rd,
   input [31:0]         wb_result,
 
@@ -130,7 +131,7 @@ module lsq #(
 
   // rename interface
   mux #(1,2) lsq_stall_mux(
-    .sel(rename_op.store),
+    .sel(rename_op.ls.store),
     .in({sq_full,~lq_insert_rdy}),
     .out(lsq_stall));
 
@@ -169,7 +170,7 @@ module lsq #(
   premux #(32,16) lq_data_mux(lq_remove_sel, lq_data, lsq_wb_result);
 
   // ------------------------------------------------------------------load queue
-  assign lq_insert_beat = rename_lsq_write & ~rename_op.store & lq_insert_rdy;
+  assign lq_insert_beat = rename_lsq_write & ~rename_op.ls.store & lq_insert_rdy;
   assign lq_insert_en = {16{lq_insert_beat}} & lq_insert_sel;
 
   assign lq_issue_req = lq_issue_rdy_r & ~lq_sq_hit & ~rob_flush;
@@ -245,7 +246,7 @@ module lsq #(
     .rst(1'b0),
     .set(1'b0),
     .enable(lq_insert_en),
-    .d(rename_op.funct3),
+    .d(rename_op.ls.funct3),
     .q(lq_type));
 
   flop #(ROBID_MSB+1) lq_robid_r[15:0](
@@ -277,8 +278,9 @@ module lsq #(
 
   wire [15:0] lq_op2_cmp;
   generate
-    for(i = 0; i < 16; i=i+1)
+    for(i = 0; i < 16; i=i+1) begin: gen_lq_op2_cmp
       assign lq_op2_cmp[i] = ~|(lq_op2[i*8+:ROBID_MSB+1] ^ wb_robid);
+    end
   endgenerate
 
   wire [15:0] lq_op2_fwd_en = {16{wb_en}} & lq_valid & ~lq_op2_rdy & lq_op2_cmp;
@@ -303,7 +305,7 @@ module lsq #(
     .rst(1'b0),
     .set(lq_op2_fwd_en),
     .enable(lq_insert_en),
-    .d((rename_op.funct3 != FUNCT3_LS_LBCMP) | rename_op2ready),
+    .d((rename_op.ls.funct3 != FUNCT3_LS_LBCMP) | rename_op2ready),
     .q(lq_op2_rdy));
 
   // lq_addr
@@ -313,7 +315,7 @@ module lsq #(
 
   assign lq_addrgen_en = lq_addrgen_sel & {16{lq_addrgen_req}};
   generate
-    for(i = 0; i < 16; i=i+1) begin
+    for(i = 0; i < 16; i=i+1) begin: gen_lq_addr_nxt
       assign lq_base_fwd_en[i] = lq_valid[i] & ~lq_base_rdy[i] &
                                  wb_en & (lq_addr[i*32+:ROBID_MSB+1] == wb_robid);
       assign lq_addr_nxt[i*32+:32] = lq_base_fwd_en[i] ? wb_result :
@@ -368,6 +370,7 @@ module lsq #(
 
   wire [15:0] dcache_lq_en = {16{dcache_lsq_valid}} & dcache_lq_sel;
 
+  wire [15:0] sq_lq_fwd_sel;
   wire [15:0] lq_result_en = dcache_lq_en | sq_lq_fwd_sel;
 
   wire [15:0] lq_result_error = dcache_lq_en & {16{dcache_lsq_error}};
@@ -375,8 +378,9 @@ module lsq #(
   wire [31:0] sq_lq_fwd_data;
   wire [15:0] [31:0] lq_result_data;
   generate
-    for(i = 0; i < 16; i=i+1)
+    for(i = 0; i < 16; i=i+1) begin: gen_lq_result_data
       assign lq_result_data[i] = dcache_lq_en[i] ? dcache_lsq_rdata : sq_lq_fwd_data;
+    end
   endgenerate
 
   flop lq_complete_r[15:0](
@@ -443,7 +447,7 @@ module lsq #(
 
   wire [15:0] lq_sq_addr_hit_hi, lq_sq_addr_hit_lo;
   generate
-    for(i = 0; i < 16; i=i+1) begin
+    for(i = 0; i < 16; i=i+1) begin: gen_lq_sq_addr_hit
       assign lq_sq_addr_hit_hi[i] = ~|(sq_addr[(i*32)+31:(i*32)+5] ^ lq_sq_addr[31:5]);
       assign lq_sq_addr_hit_lo[i] = ~|(sq_addr[(i*32)+4:(i*32)+2] ^ lq_sq_addr[4:2]);
     end
@@ -480,14 +484,15 @@ module lsq #(
   // keep it simple by only forwarding full words
   wire [15:0] sq_type_sw;
   generate
-    for(i = 0; i < 16; i=i+1)
-      assign sq_type_sw[i] = (sq_type[i*3+:3] == FUNCT3_LS_LW_SW);
+    for(i = 0; i < 16; i=i+1) begin: gen_sq_type_sw
+      assign sq_type_sw[i] = (funct3_ls_t'(sq_type[i*3+:3]) == FUNCT3_LS_LW_SW);
+    end
   endgenerate
 
   // wire sq_lq_fwd_en = (lq_sq_type == FUNCT3_LS_LW_SW);
   wire sq_lq_fwd_en = 1'b0;
 
-  wire [15:0] sq_lq_fwd_sel = {16{sq_lq_fwd_en}} &
+  assign sq_lq_fwd_sel = {16{sq_lq_fwd_en}} &
                               sq_lq_fwd_check &
                               sq_type_sw &
                               sq_addr_rdy &
@@ -501,7 +506,7 @@ module lsq #(
     .out(sq_lq_fwd_data));
 
   // -----------------------------------------------------------------store queue
-  assign sq_insert_beat = rename_lsq_write & rename_op.store & ~sq_full;
+  assign sq_insert_beat = rename_lsq_write & rename_op.ls.store & ~sq_full;
   assign sq_insert_en = {16{sq_insert_beat}} & sq_tail;
 
   assign sq_issue_req = sq_head & sq_valid & sq_addr_rdy &
@@ -622,8 +627,9 @@ module lsq #(
 
   wire [15:0] sq_base_cmp;
   generate
-    for(i = 0; i < 16; i=i+1)
+    for(i = 0; i < 16; i=i+1) begin: gen_sq_base_cmp
       assign sq_base_cmp[i] = ~|(sq_base[i*32+:ROBID_MSB+1] ^ wb_robid);
+    end
   endgenerate
 
   wire [15:0] sq_base_fwd_en = {16{wb_en}} & sq_valid & ~sq_base_rdy & sq_base_cmp;
@@ -673,8 +679,9 @@ module lsq #(
 
   wire [15:0] sq_data_cmp;
   generate
-    for(i = 0; i < 16; i=i+1)
+    for(i = 0; i < 16; i=i+1) begin: gen_sq_data_cmp
       assign sq_data_cmp[i] = ~|(sq_data[i*32+:ROBID_MSB+1] ^ wb_robid);
+    end
   endgenerate
 
   wire [15:0] sq_data_fwd_en = {16{wb_en}} & sq_valid & ~sq_data_rdy & sq_data_cmp;
@@ -717,7 +724,7 @@ module lsq #(
     .rst(1'b0),
     .set(1'b0),
     .enable(sq_insert_en),
-    .d(rename_op.funct3),
+    .d(rename_op.ls.funct3),
     .q(sq_type));
 
   flop #(32) sq_imm_r[15:0](
@@ -734,18 +741,18 @@ module lsq #(
     if(rename_lsq_write & ~lsq_stall)
       tb_top.tb_trace_lsq_dispatch(
         rename_robid,
-        rename_op.store ? ($clog2(sq_tail) | (1 << 4)) : $clog2(lq_insert_sel),
+        rename_op.ls.store ? ($clog2(sq_tail)[4:0] | (1 << 4)) : $clog2(lq_insert_sel)[4:0],
         rename_op,
         rename_op1,
         rename_op2);
 
-  integer j;
+  integer unsigned j;
   always @(posedge clk)
     if(lq_base_fwd_en != 0)
       for(j = 0; j < 16; j=j+1)
         if(lq_base_fwd_en[j])
           tb_top.tb_trace_lsq_base(
-            j,
+            j[4:0],
             wb_result);
 
   integer k;
@@ -754,7 +761,7 @@ module lsq #(
       for(k = 0; k < 16; k=k+1)
         if(sq_base_fwd_en[k])
           tb_top.tb_trace_lsq_base(
-            16 + k,
+            16 + k[4:0],
             wb_result);
 
   integer l;
@@ -763,7 +770,7 @@ module lsq #(
       for(l = 0; l < 16; l=l+1)
         if(sq_data_fwd_en[l])
           tb_top.tb_trace_lsq_wdata(
-            16 + l,
+            16 + l[4:0],
             wb_result);
 
   always @(posedge clk)

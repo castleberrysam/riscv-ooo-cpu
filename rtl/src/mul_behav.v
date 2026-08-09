@@ -3,6 +3,7 @@ module mul_behav #(
   parameter LATENCY = 4
   )(
   input         clk,
+  (* unused *)
   input         rst,
 
   input         req,
@@ -24,17 +25,17 @@ module mul_behav #(
   assign op2_sign = op2[31] & ~op[1];
 
   reg [LATENCY:1]  done_pipe_r;
-  reg [65:0]       result_pipe_r [1:LATENCY];
+  reg signed [65:0] result_pipe_r [1:LATENCY];
 
   wire [LATENCY:0] done_pipe;
-  wire [65:0]      result_pipe [0:LATENCY];
+  wire signed [65:0] result_pipe [0:LATENCY];
 
   assign done_pipe[0] = req;
   assign result_pipe[0] = $signed({op1_sign,op1}) * $signed({op2_sign,op2});
 
   genvar i;
   generate
-    for(i = 1; i <= LATENCY; i=i+1) begin
+    for(i = 1; i <= LATENCY; i=i+1) begin: gen_pipe
       assign done_pipe[i] = done_pipe_r[i];
       assign result_pipe[i] = result_pipe_r[i];
       always @(posedge clk) begin

@@ -38,11 +38,12 @@ module l2bank(
 
   integer i;
   always @(posedge clk)
-    if(valid_in_r)
+    if(valid_in_r) begin
       if(~wen_r)
         l2bank_rdata <= datamem[addr_r];
       else for(i = 0; i < 8; i=i+1)
         if(wmask_r[i])
           datamem[addr_r][i*8+:8] <= wdata_r[i*8+:8];
+    end
 
 endmodule

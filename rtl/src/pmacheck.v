@@ -4,7 +4,7 @@ module pmacheck(
   input        write,
   output       valid);
 
-  localparam
+  localparam unsigned
     ROM_BASE = 32'h10000000/64,
     ROM_SIZE = (16*1024*1024)/64,
     RAM_BASE = 32'h20000000/64,

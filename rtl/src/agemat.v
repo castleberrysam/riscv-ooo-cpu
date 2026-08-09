@@ -4,6 +4,7 @@ module agemat #(
   parameter OLDEST = 1
   )(
   input              clk,
+  (* unused *)
   input              rst,
 
   input              insert_valid,
@@ -53,10 +54,10 @@ module agemat #(
   genvar row, col;
   generate
     assign matrix[0][0] = 1'b0;
-    for(row = 1; row < WIDTH; row=row+1) begin
+    for(row = 1; row < WIDTH; row=row+1) begin: gen_row
       wire [row-1:0] matrix_r, matrix_nxt;
       dff #(row) u_matrix_r (matrix_r, matrix_nxt, clk, insert_valid);
-      for(col = 0; col < row; col=col+1) begin
+      for(col = 0; col < row; col=col+1) begin: gen_col
         assign matrix_nxt[col] = ( matrix_r[col] |
                                    insert_sel[row] ) &
                                  ~insert_sel[col];
@@ -70,13 +71,15 @@ module agemat #(
   // read side
   assign grant_valid = |req;
 
-  genvar i, j;
+  genvar i;
   generate
-    for(i = 0; i < WIDTH; i=i+1)
-      if(OLDEST)
+    for(i = 0; i < WIDTH; i=i+1) begin: gen_grant
+      if(OLDEST) begin: gen_oldest
         assign grant[i] = req[i] & (~|(req & matrix[i]));
-      else
+      end else begin: gen_youngest
         assign grant[i] = req[i] & (~|(req & ~matrix[i]));
+      end
+    end
   endgenerate
 
 endmodule

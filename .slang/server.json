@@ -1,0 +1,9 @@
+{
+  "flags": "-f rtl/build/slang.f --waiver-file rtl/waivers.toml",
+  "build": "rtl/build/slang.f",
+  "index": [
+    {
+      "dirs": ["/dev/null"]
+    }
+  ]
+}

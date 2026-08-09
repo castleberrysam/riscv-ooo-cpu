@@ -22,8 +22,8 @@ module agearr #(
 
   genvar row, col;
   generate
-    for(row = 0; row < HEIGHT; row=row+1)
-      for(col = 0; col < WIDTH; col=col+1)
+    for(row = 0; row < HEIGHT; row=row+1) begin: gen_row
+      for(col = 0; col < WIDTH; col=col+1) begin: gen_col
         flop matrix_r(
           .clk(clk),
           .rst(clear_col_en[col] | rst),
@@ -31,6 +31,8 @@ module agearr #(
           .enable(1'b0),
           .d(1'b0),
           .q(matrix[row][col]));
+      end
+    end
   endgenerate
 
   /*verilator lint_off UNOPTFLAT*/
@@ -39,8 +41,9 @@ module agearr #(
 
   genvar i;
   generate
-    for(i = 0; i < HEIGHT; i=i+1)
+    for(i = 0; i < HEIGHT; i=i+1) begin: gen_steps
       assign steps[i+1] = steps[i] | ({WIDTH{row_sel[i]}} & matrix[i]);
+    end
   endgenerate
   /*verilator lint_on UNOPTFLAT*/
 

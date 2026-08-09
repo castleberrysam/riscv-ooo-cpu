@@ -155,7 +155,7 @@ module exers #(
   premux #(6, 32) exers_rd_mux (.sel(issue_ohidx), .in(rs_rd), .out(exers_rd));
   premux #(32, 32) exers_op1_mux (.sel(issue_ohidx), .in(rs_op1), .out(exers_op1));
   premux #(32, 32) exers_op2_mux (.sel(issue_ohidx), .in(rs_op2), .out(exers_op2));
-  premux #($bits(rsop_alu_t), 32) exers_mcalu_op_mux (.sel(issue_ohidx), .in(rs_op), .out(exers_mcalu_op));
+  premux #($bits(rsop_alu_t), 32) exers_mcalu_op_mux (.sel(issue_ohidx), .in({>>{rs_op}}), .out(exers_mcalu_op));
   assign exers_scalu_op = exers_mcalu_op;
   assign exers_stall = rs_full;
 

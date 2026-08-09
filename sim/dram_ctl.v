@@ -80,7 +80,7 @@ module dram_ctl #(
   input             bus_dramctl_grant);
 
   // memory map constants
-  localparam
+  localparam unsigned
     RAM_BASE = 32'h20000000/4,
     RAM_SIZE = (128*1024*1024)/4;
 
@@ -160,7 +160,7 @@ module dram_ctl #(
         `RESPDATA(resp_tag_r, resp_addr_r, dram_rdata_r);
         dramctl_bus_tag <= resp_tag_r;
         /*verilator lint_off WIDTH*/
-        dramctl_bus_addr <= (RAM_BASE/16) + resp_addr_r[31:6];
+        dramctl_bus_addr <= RAM_BASE[29:4] + resp_addr_r[31:6];
         /*verilator lint_on WIDTH*/
         dramctl_bus_data <= dram_rdata_r[63:0];
       end
