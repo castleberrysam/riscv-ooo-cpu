@@ -45,7 +45,7 @@ module alu_simple(
 
   always @(*)
     if (op.aluext)
-      case (funct3_aluext_t'(op.aluext))
+      case (funct3_aluext_t'(op.funct3))
         FUNCT3_ALUEXT_PFIND: sc_result = pfind_res;
         FUNCT3_ALUEXT_PCLEAR: sc_result = pclear_res;
         default: sc_result = '0;
