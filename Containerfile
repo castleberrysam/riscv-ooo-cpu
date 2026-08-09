@@ -42,8 +42,6 @@ RUN curl -LO ftp://sourceware.org/pub/newlib/newlib-4.6.0.20260123.tar.gz && \
 COPY . riscv-ooo-cpu
 WORKDIR riscv-ooo-cpu
 
-RUN git submodule update --init
-
 RUN cd dramsim/DRAMsim3 && make -j`nproc`
 
 RUN mkdir spike/build && \
@@ -56,3 +54,5 @@ RUN mkdir spike/build && \
 
 RUN make -j`nproc` -C tests && \
     make -j`nproc` -C rtl
+
+CMD ["sleep", "infinity"]
